@@ -6,7 +6,7 @@
  db-save-publication
  db-load-publication
  db-get-publications
- db-save-publication-no-delete ; used by the conversion script, for speed 
+ db-save-publication-no-delete-no-transaction ; used by the conversion script, for speed 
  )
 
 (define (pub-ids-list-vecs->jsexpr l)
