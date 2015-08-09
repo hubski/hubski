@@ -11,7 +11,7 @@
   (let* ([absolute-path (build-path filepath f)]
          [file (open-input-file absolute-path)]
          [sexp (read file)])
-    (db-save-publication sexp)
+    (db-save-publication-no-delete sexp)
     (close-input-port file)))
 
 (define (convert-publications pub-dir)
