@@ -39,6 +39,9 @@
 (define (safe-member l val)
   (and (list? l) (not (equal? (member val l) #f))))
 
+(define (string-or-nil val)
+  (if (string? val) val 'nil))
+
 (define (sqlnil val)
   (if (equal? val 'nil) sql-null val))
 
@@ -52,6 +55,7 @@
 (define (db-delete-from table id)
   (let ([query (string-append "delete from \"" table "\" where \"id\" = $1::integer;")])
     (query-exec db-conn query id)))
+
 
 (define (db-save-publication sexp)
   (db-transaction (lambda () (db-save-publication-no-transaction sexp))))
@@ -275,8 +279,11 @@
 (define (db-save-publication-no-delete sexp)
   (db-transaction (lambda () (db-save-publication-no-delete-no-transaction sexp))))
 
-; used by the conversion. Deletes are expensive, because there are no indexes.
+; Used by the conversion. Deletes are expensive, because there are no indexes.
 ; \todo combine with db-save-publication
+;
+; NOTE this has a difference from db-save-publication (this is why duplicate code is bad!).
+;      This calls (string-or-nil) on 'text, because there is ONE old pub with (text t). This shouldn't be a problem once the conversion to SQL is done. Hence, I'm leaving db-save-publication not doing it, and only doing it in this function, which should only be used for the conversion.
 (define (db-save-publication-no-delete-no-transaction sexp)
   (let*
       ([save-otm-pair
@@ -337,7 +344,7 @@
   [p-mail (sqlnil (not (equal? 'nil (safe-car (val-if h 'mail)))))]
   [p-tag (sqlnil (safe-car (car (val-if h 'tag))))]
   [p-tag2 (sqlnil (safe-car (car (val-if h 'tag2))))]
-  [p-text (sqlnil (car (val-if h 'text)))]
+  [p-text (sqlnil (string-or-nil (car (val-if h 'text))))]
   [p-md (sqlnil (car (val-if h 'md)))]
   [p-webdomain (sqlnil (safe-car (car (val-if h 'domain))))]
   [p-score (sqlnil (car (val-if h 'score)))]
