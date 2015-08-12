@@ -70,21 +70,21 @@
   (list-add-hash-member-list   j 'cc             'cc
   (list-add-hash-member        j 'date           'date
   (list-add-hash-member        j 'tag2           'tag2
-  (list-add-hash-member        j 'badged_by      'badgedby
+  (list-add-hash-member-list   j 'badged_by      'badgedby
   (list-add-hash-member-votes  j
   (list-add-hash-member        j 'id             'id
   (list-add-hash-member        j 'title          'title
   (list-add-hash-member        j 'text           'text
   (list-add-hash-member        j 'kids           'kids
-  (list-add-hash-member        j 'shared_by      'sharedby
-  (list-add-hash-member        j 'search_url     'searchurl
+  (list-add-hash-member-list   j 'shared_by      'sharedby
+  (list-add-hash-member-list   j 'search_url     'searchurl
   (list-add-hash-member-list   j 'search_text    'searchtext
   (list-add-hash-member        j 'time           'time
   (list-add-hash-member-symbol j 'type           'type
   (list-add-hash-member        j 'md             'md
   (list-add-hash-member        j 'url            'url
-  (list-add-hash-member        j 'domain         'domain
-  (list-add-hash-member        j 'search_title   'searchtitle
+  (list-add-hash-member-list   j 'domain         'domain
+  (list-add-hash-member-list   j 'search_title   'searchtitle
   (list-add-hash-member        j 'tag            'tag
   (list-add-hash-member        j 'score          'score
   (list-add-hash-member        j 'user           'by
