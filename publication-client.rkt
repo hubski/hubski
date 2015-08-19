@@ -11,6 +11,7 @@
 
 #lang racket
 (require net/http-client)
+(require net/url)
 (require json)
 (require "publications.rkt")
 
@@ -19,39 +20,54 @@
  set-publication
  )
 
-(define data-host "localhost")
+(define data-host "127.0.0.1")
 (define data-port 8003)
 (define pub-uri "/api/publication/")
 
-(define rest-conn-internal 'nil)
-(define (rest-conn)
-  (define (get-and-set-rest-conn)
-    (set! rest-conn-internal (http-conn-open
-                              data-host
-                              #:port data-port))
-    rest-conn-internal)  
-  (if (and (http-conn? rest-conn-internal) (http-conn-live? rest-conn-internal))
-      rest-conn-internal
-      (get-and-set-rest-conn)))
-          
-(define (get-publication id)
-  (define-values (status-line headers response)
-    (http-conn-sendrecv!
-     (rest-conn)
-     (string-append pub-uri (number->string id))))
-  (define str (read-json response))
-  (define pub (jsexpr->pub-sexp str))
-;;  (define pub-jsexpr (pub-sexp->jsexpr pub))
-;;  (define pub-json-string (jsexpr->string pub-jsexpr))
-  pub)
+(define conn (http-conn))
 
+;(define rest-conn-internal 'nil)
+;; (define (rest-conn)
+;;   (http-conn-open
+;;    data-host
+;;    #:port data-port))
+  ;; (define (get-and-set-rest-conn)
+  ;;   (set! rest-conn-internal (http-conn-open
+  ;;                             data-host
+  ;;                             #:port data-port))
+  ;;   rest-conn-internal)  
+  ;; (if (and (http-conn? rest-conn-internal) (http-conn-live? rest-conn-internal))
+  ;;     rest-conn-internal
+  ;;     (get-and-set-rest-conn)))
+
+(define (get-publication id)
+  (let* ([path (list (path/param "api" '()) (path/param "publication" '()) (path/param (number->string id) '()))]
+         [data-url (url "http" #f data-host data-port #t path '() #f)]
+         [port (get-pure-port data-url)]
+         [jsexpr (read-json port)]
+         [pub (jsexpr->pub-sexp jsexpr)])
+    pub))
+
+;;   (http-conn-open! conn data-host #:port data-port)
+;;   (define-values (status-line headers response)
+;;     (http-conn-sendrecv!
+;;      conn
+;;      (string-append pub-uri (number->string id))))
+;;   (define str (read-json response))
+;;   (define pub (jsexpr->pub-sexp str))
+;; ;;  (define pub-jsexpr (pub-sexp->jsexpr pub))
+;; ;;  (define pub-json-string (jsexpr->string pub-jsexpr))
+;;   pub)
+
+; \todo test (especially ctags)
 (define (set-publication pub)
+  (http-conn-open! conn data-host #:port data-port)
   (define js (pub-sexp->jsexpr pub))
   (define id (hash-ref js 'id))  
   (define js-str (jsexpr->string js))
   (define-values (status-line headers response)
     (http-conn-sendrecv!
-     (rest-conn)
+     conn
      (string-append pub-uri (number->string id))
      #:method #"POST"
      #:data js-str))

@@ -74,7 +74,20 @@
               void))]
     [save-cc (lambda (id ccs) (save-otm-pair id ccs "publication_cc" "username"))]
     [save-community-tags (lambda (id ctags) (save-otm-pair id ctags "publication_community_tags" "tag"))]
-    [save-community-tagses (lambda (id ctagses) (save-otm-pair id ctagses "publication_community_tagses" "tag"))]
+    [save-community-tagses
+     (lambda (id ctags)
+       (letrec ([table "publication_community_tagses"]
+                [acc (lambda (id ctags)
+                       (if (empty? ctags) (void)
+                           (let* ([ctagpair (first ctags)]
+                                  [debug (write ctagpair)]
+                                  [ctag (first ctagpair)]
+                                  [username (second ctagpair)])
+                                  (query-exec db-conn (string-append "insert into \"" table "\" (id, username, tag) values ($1::integer, $2::text, $3::text);")
+                                              id username ctag)
+                                  (acc id (rest ctags)))))])
+         (query-exec db-conn (string-append "delete from \"" table "\" where \"id\" = $1::integer;") id)
+         (acc id ctags)))]       
     [save-search-text (lambda (id lst) (save-otm-pair id lst "publication_search_text" "word"))]
     [save-search-title (lambda (id lst) (save-otm-pair id lst "publication_search_title" "word"))]
     [save-search-url (lambda (id lst) (save-otm-pair id lst "publication_search_url" "word"))]
@@ -134,7 +147,7 @@
   [p-no-kill (sqlnil (safe-member keys 'nokill))]
   [p-cc (safe-car (val-if h 'cc))]
   [p-ctags (safe-car (val-if h 'ctag))]
-  [p-ctagses (safe-car (safe-car (val-if h 'ctags)))]
+  [p-ctagses (safe-car (val-if h 'ctags))]
   [p-search-text (safe-car (safe-car (val-if h 'searchtext)))]
   [p-search-title (safe-car (safe-car (val-if h 'searchtitle)))]
   [p-search-url (safe-car (val-if h 'searchurl))]
@@ -164,7 +177,7 @@
   ;; (write "parentid: ")  (write p-parent-id); (newline)
   ;; (write "locked: ")    (write p-locked) (newline)
   ;; (write "nokill: ")    (write p-no-kill) (newline)
-  ;; MUST use a transaction. Because we delete-then-insert, removing the transaction would be a race condition.    
+  ;; MUST use a transaction. Because we delete-then-insert, removing the transaction would be a race condition.
   (query-exec db-conn "BEGIN;") 
   ;; \todo change to use upsert, when we update to postgresl 9.5
   (query-exec db-conn "delete from \"publications\" where \"id\" = $1::integer;" p-id)
@@ -217,6 +230,7 @@
   ; this could be made more efficient, by querying the type_id with the publication query, and passing the result here.
   [type-query "select \"publication_type\" from \"publication_types\" where \"id\" = (select \"type_id\" from \"publications\" where \"id\" = $1);"]
   [votes-query "select \"vote_id\", \"username\", \"up\", \"num\" from \"publication_votes\" where \"id\" = $1;"]
+  [ctags-query "select \"username\", \"tag\" from \"publication_community_tagses\" where \"id\" = $1;"]
   [+type
    (lambda (h)
      (let* ([id (hash-ref h 'id)]
@@ -234,7 +248,17 @@
        (hash-set h json-key vals-list)))]
   [+cc (lambda (h) (+otm h "publication_cc" "username" 'cc))]
   [+community-tags (lambda (h) (+otm h "publication_community_tags" "tag" 'community_tag))]
-  [+community-tagses (lambda (h) (+otm h "publication_community_tagses" "tag" 'community_tags))]
+  [+community-tagses
+   (lambda (h)
+     (letrec ([id (hash-ref h 'id)]
+               [ctags (query-rows db-conn ctags-query id)]
+               [acc
+                (lambda (ctag-h ctags)
+                  (if (empty? ctags) ctag-h
+                      (let* ([ctag (first ctags)]
+                             [new-h (hash-set ctag-h (string->symbol (vector-ref ctag 0)) (vector-ref ctag 1))])
+                        (acc new-h (rest ctags)))))])
+               (hash-set h 'community_tags (acc (make-immutable-hash) ctags))))]
   [+search-text (lambda (h) (+otm h "publication_search_text" "word" 'search_text))]
   [+search-title (lambda (h) (+otm h "publication_search_title" "word" 'search_title))]
   [+search-url (lambda (h) (+otm h "publication_search_url" "word" 'search_url))]
@@ -285,6 +309,7 @@
 ; NOTE this has a difference from db-save-publication (this is why duplicate code is bad!).
 ;      This calls (string-or-nil) on 'text, because there is ONE old pub with (text t). This shouldn't be a problem once the conversion to SQL is done. Hence, I'm leaving db-save-publication not doing it, and only doing it in this function, which should only be used for the conversion.
 (define (db-save-publication-no-delete-no-transaction sexp)
+;  (write sexp)
   (let*
       ([save-otm-pair
         (lambda (id vals table val-column)
@@ -296,8 +321,23 @@
                      ) vals)
               void))]
     [save-cc (lambda (id ccs) (save-otm-pair id ccs "publication_cc" "username"))]
-    [save-community-tags (lambda (id ctags) (save-otm-pair id ctags "publication_community_tags" "tag"))]
-    [save-community-tagses (lambda (id ctagses) (save-otm-pair id ctagses "publication_community_tagses" "tag"))]
+    [save-community-tags (lambda (id ctagses) (save-otm-pair id ctagses "publication_community_tags" "tag"))]
+    [save-community-tagses
+     (lambda (id ctags)
+;       (write ctags) ; debug
+       (if (not (list? ctags)) (void)
+           (letrec ([table "publication_community_tagses"]
+                    [acc (lambda (id ctags)
+                           (if (empty? ctags) (void)
+                               (let* ([ctagpair (first ctags)]
+;                                      [debug (write ctagpair)]                                  
+                                      [ctag (first ctagpair)]
+                                      [username (second ctagpair)])
+                                 (query-exec db-conn (string-append "insert into \"" table "\" (id, username, tag) values ($1::integer, $2::text, $3::text);")
+                                             id username ctag)
+                                 (acc id (rest ctags)))))])
+             (query-exec db-conn (string-append "delete from \"" table "\" where \"id\" = $1::integer;") id)
+             (acc id ctags))))]
     [save-search-text (lambda (id lst) (save-otm-pair id lst "publication_search_text" "word"))]
     [save-search-title (lambda (id lst) (save-otm-pair id lst "publication_search_title" "word"))]
     [save-search-url (lambda (id lst) (save-otm-pair id lst "publication_search_url" "word"))]
@@ -335,6 +375,7 @@
   [type-id-comment (get-type-id "comment" db-conn)]
   [h (make-hash sexp)]
   [p-id (sqlnil (car (val-if h 'id)))]
+;  [debug (begin (write p-id) (newline))]
   [p-type (sqlnil (type->id (car (val-if h 'type)) type-id-story type-id-comment))]
   [p-username (sqlnil (car (val-if h 'by)))]
   [p-time (sqlnil (car (val-if h 'time)))]
@@ -356,7 +397,7 @@
   [p-no-kill (sqlnil (safe-member keys 'nokill))]
   [p-cc (safe-car (val-if h 'cc))]
   [p-ctags (safe-car (val-if h 'ctag))]
-  [p-ctagses (safe-car (safe-car (val-if h 'ctags)))]
+  [p-ctagses (safe-car (val-if h 'ctags))]
   [p-search-text (safe-car (safe-car (val-if h 'searchtext)))]
   [p-search-title (safe-car (safe-car (val-if h 'searchtitle)))]
   [p-search-url (safe-car (val-if h 'searchurl))]

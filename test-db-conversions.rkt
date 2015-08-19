@@ -6,7 +6,7 @@
 (require "publications.rkt")
 
 ; \todo make command line arg
-(define filepath "")
+(define filepath "/home/rob/hubski-backup-arc/news/story/")
 
 (define (file-to-sexp f)
   (let* ([absolute-path (build-path filepath f)]
@@ -23,12 +23,18 @@
            (let ([key (hash-iterate-key a i)])
              (if (and (not (equal? key 'ip)) ; ip is in old pubs, but not stored in the db
                       (not (equal? key 'ptag)) ; "
-                      (not (equal? key 'sockvotes)) ; "                      
+                      (not (equal? key 'sockvotes)) ; "
+                      (not (equal? key 'keys)) ; "
+                      (not (equal? key 'searchtext)) ; confident, data is malformed
+                      (not (equal? key 'searchtitle)) ; "                      
+                      (not (equal? key 'domain)) ; "
+                      (not (equal? key 'tag2)) ; "
                       (not (hash-has-key? b key)))
-                 (let ()
-                   (
-                    (write "not has") (write key) (newline)   
-                    #f))
+                 (let ([a "foo"])
+                   (write "not has")
+                   (write key)
+                   (newline)
+                   #f)
                  (let ([next (hash-iterate-next a i)])
                    (if (equal? next #f)
                        #t
@@ -69,10 +75,19 @@
          )
     (and (equal? a-id b-id) (equal? a-user b-user) (equal? a-up b-up) (equal? a-num b-num))))
 
+(define (ctags-equal? al bl)
+  (let ([ah (make-hash (car al))]
+        [bh (make-hash (car bl))])
+    (equal? ah bh)))
+        
 (define (hash-values-subset-equal? key a b)
-  (if (equal? key 'votes)
-      (votes-equal? a b)
-      (equal? a b)))
+  (cond [(and (equal? key 'votes) (not (or (equal? a 'nil) (equal? b 'nil) (equal? a '(nil)) (equal? b '(nil)))))
+         (votes-equal? a b)]
+        [(and (equal? key 'ctags) (not (or (equal? a 'nil) (equal? b 'nil) (equal? a '(nil)) (equal? b '(nil)))))
+         (ctags-equal? a b)]
+        [else
+         (equal? a b)]
+      ))
 
 ; Checks that all values in a match all values of the same key in b.
 ; Assumes (hash-keys-subset? a b).
@@ -86,12 +101,23 @@
              (if (and (not (equal? key 'ip)) ; ip is in old pubs, but not stored in the db
                       (not (equal? key 'ptag)) ; "
                       (not (equal? key 'sockvotes)) ; "
+                      (not (equal? key 'keys)) ; "
+                      (not (equal? key 'searchtext)) ; confident, data is malformed
+                      (not (equal? key 'searchtitle)) ; "
+                      (not (equal? key 'domain)) ; "
+                      (not (equal? key 'tag2)) ; "
                       (not (and (equal? key 'text) (equal? a-val '(t)))) ; for corrupt pub 78
                       (not (hash-values-subset-equal? key a-val b-val)))
-                 (let ()
-                   (
-                    (write "not equal") (write key) (write " ") (write a-val) (write " ") (write "b-val") (newline)
-                    #f))
+                 (let ([a "foo"])
+                   (write "not equal")
+                   (write key)
+                   (write "file: ")
+                   (write a-val)
+                   (write " api: ")
+                   (write b-val)
+                   (write " ")
+                   (newline)
+                   #f)
                  (let ([next (hash-iterate-next a i)])
                    (if (equal? next #f)
                        #t
@@ -106,23 +132,35 @@
 (define (hash-subset? a b)
   (and (hash-keys-subset? a b) (hash-values-subset? a b)))
 
-(let* (
-      [api-pub  (get-publication 78)]
-;;      [api-pub      (jsexpr->pub-sexp (string->jsexpr api-pub-str))]
-      [file-pub     (file-to-sexp "78")]
-      [api-pub-h    (make-hash api-pub)]
-      [file-pub-h   (make-hash file-pub)]
-      )
-  ;; (write "api-pub-string") (newline)
-  ;; (write api-pub-str) (newline)
-  ;; (newline)  
-  (write "api-pub") (newline)
-  (write api-pub) (newline)
-  (newline)
-  (write "file-pub") (newline)
-  (write file-pub) (newline)
-  (newline)  
-  (write "equal? ") (write (hash-subset? file-pub-h api-pub-h)) (newline)
-  )
+; \todo combine with convert-publications-to-sql.rkt (parse-file)
+(define (parse-file filename)
+  (let* ([absolute-path (build-path filepath filename)]
+         [file (open-input-file absolute-path)]
+         [sexp (read file)])
+    (test-db-conversion sexp)
+    (close-input-port file)))
 
-(newline)
+(define (safe-car l)
+  (if (list? l) (car l) l))
+
+(define (test-db-conversion sexp)
+  (let* ([file-pub-h (make-hash sexp)]
+         [id         (safe-car (hash-ref file-pub-h 'id))]
+         [api-pub    (get-publication id)]
+         [api-pub-h  (make-hash api-pub)]
+         [eql (hash-subset? file-pub-h api-pub-h)])
+    (if (not eql) (begin(write id) (newline)) void)))
+
+;    (write "file pub:") (newline) (write file-pub-h) (newline)
+;    (write "api pub:") (newline) (write api-pub-h) (newline)
+;    (hash-subset? file-pub-h api-pub-h)))
+
+    ;; (if (not (hash-subset? file-pub-h api-pub-h))
+    ;;     (let () (write id) (newline) (newline))
+    ;;     (void))))
+
+(define (test-db-conversions pub-dir)
+  (let ([files (directory-list pub-dir #:build? #f)])
+    (map (lambda (f) (parse-file f)) files)))
+
+(test-db-conversions filepath)

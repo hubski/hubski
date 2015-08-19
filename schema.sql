@@ -48,8 +48,9 @@ create table if not exists "publication_community_tags" (
 -- \todo figure out why there are both 'ctag' and 'ctags'
 -- maps to ctags field in pub structure
 create table if not exists "publication_community_tagses" (
-  id   integer, -- fk into publication, NOT pk, one-to-many
-  tag  text
+  id       integer, -- fk into publication, NOT pk, one-to-many
+  username text,
+  tag      text
 );
 
 -- \todo remove this, when a fulltext search solution exists

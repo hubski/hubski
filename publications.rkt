@@ -19,7 +19,9 @@
 
 (define (list-add-hash-member h memb sexp-memb l)
   (let ([val (null->nil (hash-ref-or-nil h memb))])
-    (cons (list sexp-memb val) l)))
+    (if (equal? val '())
+        (cons (list sexp-memb 'nil) l)
+        (cons (list sexp-memb val) l))))
 
 (define (list-add-hash-member-symbol h memb sexp-memb l)
   (let ([val (null->nil (hash-ref-or-nil h memb))])
@@ -39,6 +41,14 @@
         (cons (list sexp-memb 'nil) l)
         (cons (list sexp-memb (list (hash-ref h memb))) l))))
 
+
+(define (list-add-hash-member-list-of-nil h memb sexp-memb l)
+  (let ([val (null->nil (hash-ref-or-nil h memb))])
+    (if (or (equal? val 'nil) (equal? val '()))
+        (cons (list sexp-memb '(nil)) l)
+        (cons (list sexp-memb (list (hash-ref h memb))) l))))
+
+
 (define (vote-hash->list h publication-id)
   (list (hash-ref h 'id)
         publication-id
@@ -52,7 +62,27 @@
         [sexp-memb 'votes]
         [votes (null->nil (hash-ref-or-nil h memb))]
         [votes-list (map (lambda (v) (vote-hash->list v id)) votes)])
-    (cons (list 'votes votes-list) l)))
+    (if (equal? votes-list '())
+        (cons (list sexp-memb 'nil) l)
+        (cons (list sexp-memb votes-list) l))))
+
+(define (ctags-hash->list h)
+  (letrec ([ctags-iter (lambda (i l)
+                         (if (equal? i #f) l
+                             (let* ([user (symbol->string (hash-iterate-key h i))]
+                                    [tag (hash-iterate-value h i)]
+                                    [newl (list* (list  tag user) l)])
+                               (ctags-iter (hash-iterate-next h i) newl))))])
+    (ctags-iter (hash-iterate-first h) '())))
+                                  
+(define (list-add-hash-member-community-tags h l)
+  (let* ([memb 'community_tags]
+         [sexp-member 'ctags]
+         [ctags (null->nil (hash-ref-or-nil h memb))])
+;    (write "lahmct ") (write ctags) (write newline)
+    (if (hash-empty? ctags)
+        (cons (list sexp-member 'nil) l)
+        (cons (list sexp-member (ctags-hash->list (hash-ref h memb))) l))))
 
 ; \todo write a pipeline macro?
 (define (jsexpr->pub-sexp-not-null j)
@@ -60,25 +90,25 @@
   (list-add-hash-member        j 'parent_id      'parent
   (list-add-hash-member-bool   j 'draft          'draft
   (list-add-hash-member-bool   j 'deleted        'deleted
-  (list-add-hash-member-list   j 'cubbed_by      'cubbedby
-  (list-add-hash-member-list   j 'badged_kids    'badgedkids
-  (list-add-hash-member-list   j 'saved_by       'savedby
-  (list-add-hash-member-list   j 'community_tags 'ctags
-  (list-add-hash-member-list   j 'community_tag  'ctag
+  (list-add-hash-member        j 'cubbed_by      'cubbedby
+  (list-add-hash-member        j 'badged_kids    'badgedkids
+  (list-add-hash-member        j 'saved_by       'savedby
+  (list-add-hash-member-community-tags j
+  (list-add-hash-member        j 'community_tag  'ctag
   ; ptag?
   (list-add-hash-member-bool   j 'mail           'mail
-  (list-add-hash-member-list   j 'cc             'cc
+  (list-add-hash-member        j 'cc             'cc
   (list-add-hash-member        j 'date           'date
   (list-add-hash-member        j 'tag2           'tag2
-  (list-add-hash-member-list   j 'badged_by      'badgedby
+  (list-add-hash-member        j 'badged_by      'badgedby
   (list-add-hash-member-votes  j
   (list-add-hash-member        j 'id             'id
   (list-add-hash-member        j 'title          'title
   (list-add-hash-member        j 'text           'text
   (list-add-hash-member        j 'kids           'kids
-  (list-add-hash-member-list   j 'shared_by      'sharedby
-  (list-add-hash-member-list   j 'search_url     'searchurl
-  (list-add-hash-member-list   j 'search_text    'searchtext
+  (list-add-hash-member        j 'shared_by      'sharedby
+  (list-add-hash-member        j 'search_url     'searchurl
+  (list-add-hash-member-list-of-nil j 'search_text    'searchtext
   (list-add-hash-member        j 'time           'time
   (list-add-hash-member-symbol j 'type           'type
   (list-add-hash-member        j 'md             'md
@@ -152,6 +182,16 @@
      'up up
      'user username
      'num num)))
+  
+(define (community-tags-list->hash h ctags)
+  (letrec ([acc (lambda (ctags chash)
+             (if (empty? ctags) chash
+                 (let* ([ctag (first ctags)]
+                        [tag-str (first ctag)]
+                        [user-str (second ctag)]
+                        [newhash (hash-set chash (string->symbol user-str) tag-str)])
+                   (acc (rest ctags) newhash))))])
+    (acc ctags (make-immutable-hash))))
 
 (define (pub-sexp->jsexpr-not-null p)
   (let ([h (make-hash p)])
@@ -163,7 +203,7 @@
      'cubbed_by      (get-list h 'cubbedby)
      'badged_kids    (get-list h 'badgedkids)
      'saved_by       (get-list h 'savedby)
-     'community_tags (get-list h 'ctags)
+     'community_tags (community-tags-list->hash h 'ctags)
      'community_tag  (get-list h 'ctag)
      ; ptag?   
      'mail           (get-bool h 'mail)
