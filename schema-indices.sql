@@ -1,0 +1,14 @@
+create index publication_badged_by_id_idx on publication_badged_by (id);
+create index publication_badged_kids_id_idx on publication_badged_kids (id);
+create index publication_cc_id_idx on publication_cc (id);
+create index publication_community_tags_id_idx on publication_community_tags (id);
+create index publication_community_tagses_id_idx on publication_community_tagses (id);
+create index publication_cubbed_by_id_idx on publication_cubbed_by (id);
+create index publication_kids_id_idx on publication_kids (id);
+create index publication_saved_by_id_idx on publication_saved_by (id);
+create index publication_search_text_id_idx on publication_search_text (id);
+create index publication_search_title_id_idx on publication_search_title (id);
+create index publication_search_url_id_idx on publication_search_url (id);
+create index publication_shared_by_id_idx on publication_shared_by (id);
+create index publication_votes_id_idx on publication_votes (id);
+create index publications_id_idx on publications (id);
