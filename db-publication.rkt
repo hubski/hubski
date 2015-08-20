@@ -1,3 +1,8 @@
+; This file has been VERSIONED into the hub repo.
+; DO NOT change it from hub. Change in github.com/hubski/hubski,
+; and update the versioned file. Contributors WILL update this
+; file in hub without checking for changes.
+
 #lang racket
 (require db)
 (require "db.rkt")
@@ -6,7 +11,7 @@
  db-save-publication
  db-load-publication
  db-get-publications
- db-save-publication-no-delete-no-transaction ; used by the conversion script, for speed 
+ db-save-publication-no-delete-no-transaction ; used by the conversion script, for speed
  )
 
 (define (pub-ids-list-vecs->jsexpr l)

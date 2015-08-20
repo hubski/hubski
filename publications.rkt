@@ -1,3 +1,8 @@
+; This file has been VERSIONED into the hub repo.
+; DO NOT change it from hub. Change in github.com/hubski/hubski,
+; and update the versioned file. Contributors WILL update this
+; file in hub without checking for changes.
+
 #lang racket
 (require json)
 
@@ -6,6 +11,7 @@
  pub-sexp->jsexpr
  publication-jsexpr?
  try-string->jsexpr
+ pub-sexp->pub-hash 
  )
 
 (define (try-string->jsexpr s)
@@ -122,6 +128,16 @@
   (list-add-hash-member-bool   j 'locked         'locked
   '()
   ))))))))))))))))))))))))))))))))))
+
+(define (pub-sexp->pub-hash s)
+  (letrec ([acc (lambda (s h)
+             (if (equal? s '()) h
+                 (let* ([head (first s)]
+                        [key (first head)]
+                        [value (second head)])
+                   (hash-set! h key value)
+                   (acc (rest s) h))))])
+    (acc s (make-hasheq))))
 
 (define (votes-list-list->votes-list-hash l)
   (if (list? l)
