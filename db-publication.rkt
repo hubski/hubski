@@ -1,7 +1,7 @@
-; This file has been VERSIONED into the hub repo.
-; DO NOT change it from hub. Change in github.com/hubski/hubski,
-; and update the versioned file. Contributors WILL update this
-; file in hub without checking for changes.
+;; This file has been VERSIONED into the hub repo.
+;; DO NOT change it from hub. Change in github.com/hubski/hubski,
+;; and update the versioned file. Contributors WILL update this
+;; file in hub without checking for changes.
 
 #lang racket
 (require db)
@@ -22,9 +22,8 @@
         [pubs-vec (query-rows db-conn publication-ids-query)])
     (pub-ids-list-vecs->jsexpr pubs-vec)))
 
-; nil if list is nil, else (car l)
 (define (safe-car l)
-  (if (not (list? l)) l (car l)))
+  (if (not (pair? l)) l (car l)))
 
 (define (type->id type story-id comment-id)
   (cond [(equal? type 'story) story-id]
@@ -83,7 +82,7 @@
      (lambda (id ctags)
        (letrec ([table "publication_community_tagses"]
                 [acc (lambda (id ctags)
-                       (if (empty? ctags) (void)
+                       (if (or (equal? ctags sql-null) (empty? ctags)) (void)
                            (let* ([ctagpair (first ctags)]
                                   [debug (write ctagpair)]
                                   [ctag (first ctagpair)]
@@ -130,58 +129,60 @@
   [type-id-story (get-type-id "story" db-conn)]
   [type-id-comment (get-type-id "comment" db-conn)]
   [h (make-hash sexp)]
-  [p-id (sqlnil (car (val-if h 'id)))]
-  [p-type (sqlnil (type->id (car (val-if h 'type)) type-id-story type-id-comment))]
-  [p-username (sqlnil (car (val-if h 'by)))]
-  [p-time (sqlnil (car (val-if h 'time)))]
+  [p-id (sqlnil (safe-car (val-if h 'id)))]
+  [p-type (sqlnil (type->id (safe-car (val-if h 'type)) type-id-story type-id-comment))]
+  [p-username (sqlnil (safe-car (val-if h 'by)))]
+  [p-time (sqlnil (safe-car (val-if h 'time)))]
   [p-date (sqlnil (safe-car (val-if h 'date)))]
-  [p-url (sqlnil (car (val-if h 'url)))]
-  [p-title (sqlnil (car (val-if h 'title)))]
+  [p-url (sqlnil (safe-car (val-if h 'url)))]
+  [p-title (sqlnil (safe-car (val-if h 'title)))]
   [p-mail (sqlnil (not (equal? 'nil (safe-car (val-if h 'mail)))))]
-  [p-tag (sqlnil (safe-car (car (val-if h 'tag))))]
-  [p-tag2 (sqlnil (safe-car (car (val-if h 'tag2))))]
-  [p-text (sqlnil (car (val-if h 'text)))]
-  [p-md (sqlnil (car (val-if h 'md)))]
-  [p-webdomain (sqlnil (safe-car (car (val-if h 'domain))))]
-  [p-score (sqlnil (car (val-if h 'score)))]
+  [p-tag (sqlnil (safe-car (safe-car (val-if h 'tag))))]
+  [p-tag2 (sqlnil (safe-car (safe-car (val-if h 'tag2))))]
+  [p-text (sqlnil (safe-car (val-if h 'text)))]
+  [p-md (sqlnil (safe-car (val-if h 'md)))]
+  [p-webdomain (sqlnil (safe-car (safe-car (val-if h 'domain))))]
+  [p-score (sqlnil (safe-car (val-if h 'score)))]
   [p-deleted (sqlnil (not (equal? 'nil (safe-car (val-if h 'deleted)))))]
   [p-draft (sqlnil (not (equal? 'nil (safe-car (val-if h 'draft)))))]
-  [p-parent-id (sqlnil (car (val-if h 'parent)))]
+  [p-parent-id (sqlnil (safe-car (val-if h 'parent)))]
   [keys (sqlnil (safe-car (val-if h 'keys)))]
   [p-locked (sqlnil (safe-member keys 'locked))]
   [p-no-kill (sqlnil (safe-member keys 'nokill))]
-  [p-cc (safe-car (val-if h 'cc))]
-  [p-ctags (safe-car (val-if h 'ctag))]
-  [p-ctagses (safe-car (val-if h 'ctags))]
-  [p-search-text (safe-car (safe-car (val-if h 'searchtext)))]
-  [p-search-title (safe-car (safe-car (val-if h 'searchtitle)))]
-  [p-search-url (safe-car (val-if h 'searchurl))]
-  [p-votes (safe-car (val-if h 'votes))]
-  [p-saved-by (safe-car (val-if h 'savedby))]
-  [p-shared-by (safe-car (val-if h 'sharedby))]
-  [p-badged-by (safe-car (val-if h 'badgedby))]
-  [p-badged-kids (safe-car (val-if h 'badgedkids))]
-  [p-cubbed-by (safe-car (val-if h 'cubbedby))]
-  [p-kids (safe-car (val-if h 'kids))])
-  ;; (write (string-append "db-save-publication " (number->string p-id) " starting")) (newline) 
-  ;; (write "type: ")      (write p-type) (newline)
-  ;; (write "user: ")      (write p-username) (newline)
-  ;; (write "time: ")      (write p-time) (newline)
-  ;; (write "date: ")      (write p-date) (newline)
-  ;; (write "url: ")       (write p-url) (newline)
-  ;; (write "title: ")     (write p-title) (newline)
-  ;; (write "mail: ")      (write p-mail) (newline)
-  ;; (write "tag: ")       (write p-tag) (newline)
-  ;; (write "tag2: ")      (write p-tag2) (newline)
-  ;; (write "text: ")      (write p-text) (newline)
-  ;; (write "md: ")        (write p-md) (newline)
-  ;; (write "webdomain: ") (write p-webdomain) (newline)
-  ;; (write "score: ")     (write p-score) (newline)
-  ;; (write "deleted: ")   (write p-deleted) (newline)
-  ;; (write "draft: ")     (write p-draft) (newline)
-  ;; (write "parentid: ")  (write p-parent-id); (newline)
-  ;; (write "locked: ")    (write p-locked) (newline)
-  ;; (write "nokill: ")    (write p-no-kill) (newline)
+  [p-cc (sqlnil (safe-car (val-if h 'cc)))]
+  [p-ctags (sqlnil (safe-car (val-if h 'ctag)))]
+  [p-ctagses (sqlnil (safe-car (val-if h 'ctags)))]
+  [p-search-text (sqlnil (safe-car (safe-car (val-if h 'searchtext))))]
+  [p-search-title (sqlnil (safe-car (safe-car (val-if h 'searchtitle))))]
+  [p-search-url (sqlnil (safe-car (val-if h 'searchurl)))]
+  [p-votes (sqlnil (safe-car (val-if h 'votes)))]
+  [p-saved-by (sqlnil (safe-car (val-if h 'savedby)))]
+  [p-shared-by (sqlnil (safe-car (val-if h 'sharedby)))]
+  [p-badged-by (sqlnil (safe-car (val-if h 'badgedby)))]
+  [p-badged-kids (sqlnil (safe-car (val-if h 'badgedkids)))]
+  [p-cubbed-by (sqlnil (safe-car (val-if h 'cubbedby)))]
+  [p-kids (sqlnil (safe-car (val-if h 'kids)))])
+  ;; (write-to-file (string-append "db-save-publication " (number->string p-id) " starting") "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append) 
+  ;; (write-to-file "type: " "debug" #:exists 'append)      (write-to-file p-type "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
+  ;; (write-to-file "user: " "debug" #:exists 'append)      (write-to-file p-username "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
+  ;; (write-to-file "time: " "debug" #:exists 'append)      (write-to-file p-time "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
+  ;; (write-to-file "date: " "debug" #:exists 'append)      (write-to-file p-date "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
+  ;; (write-to-file "url: " "debug" #:exists 'append)       (write-to-file p-url "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
+  ;; (write-to-file "title: " "debug" #:exists 'append)     (write-to-file p-title "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
+  ;; (write-to-file "mail: " "debug" #:exists 'append)      (write-to-file p-mail "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
+  ;; (write-to-file "tag: " "debug" #:exists 'append)       (write-to-file p-tag "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
+  ;; (write-to-file "tag2: " "debug" #:exists 'append)      (write-to-file p-tag2 "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
+  ;; (write-to-file "text: " "debug" #:exists 'append)      (write-to-file p-text "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
+  ;; (write-to-file "md: " "debug" #:exists 'append)        (write-to-file p-md "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
+  ;; (write-to-file "webdomain: " "debug" #:exists 'append) (write-to-file p-webdomain "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
+  ;; (write-to-file "score: " "debug" #:exists 'append)     (write-to-file p-score "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
+  ;; (write-to-file "deleted: " "debug" #:exists 'append)   (write-to-file p-deleted "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
+  ;; (write-to-file "draft: " "debug" #:exists 'append)     (write-to-file p-draft "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
+  ;; (write-to-file "parentid: " "debug" #:exists 'append)  (write-to-file p-parent-id "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
+  ;; (write-to-file "locked: " "debug" #:exists 'append)    (write-to-file p-locked "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
+  ;; (write-to-file "nokill: " "debug" #:exists 'append)    (write-to-file p-no-kill "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
+  ;; (write-to-file "ctags: " "debug" #:exists 'append)     (write-to-file p-ctags "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
+  ;; (write-to-file "ctagses: " "debug" #:exists 'append)     (write-to-file p-ctagses "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)    
   ;; MUST use a transaction. Because we delete-then-insert, removing the transaction would be a race condition.
   (query-exec db-conn "BEGIN;") 
   ;; \todo change to use upsert, when we update to postgresl 9.5
@@ -229,30 +230,42 @@
    'no_kill   (sql-null->null (vector-ref v 16))
    ))
 
+(define by-id-query  (virtual-statement "select \"username\", \"time\", \"date\", \"url\", \"title\", \"mail\", \"tag\", \"tag2\", \"text\", \"md\", \"web_domain\", \"score\", \"deleted\", \"draft\", \"parent_id\", \"locked\", \"no_kill\" from \"publications\" where \"id\" =  $1"))
+; this could be made more efficient, by querying the type_id with the publication query, and passing the result here.
+(define type-query  (virtual-statement "select \"publication_type\" from \"publication_types\" where \"id\" = (select \"type_id\" from \"publications\" where \"id\" = $1);"))
+(define votes-query (virtual-statement "select \"vote_id\", \"username\", \"up\", \"num\" from \"publication_votes\" where \"id\" = $1;"))
+(define ctags-query (virtual-statement "select \"username\", \"tag\" from \"publication_community_tagses\" where \"id\" = $1;"))
+(define (otm-from-id-query table value-column) (virtual-statement (string-append "select \"" value-column "\" from \"" table "\" where \"id\" = $1;")))
+(define cc-query             (otm-from-id-query "publication_cc"             "username"))
+(define community-tags-query (otm-from-id-query "publication_community_tags" "tag"))
+(define search-text-query    (otm-from-id-query "publication_search_text"    "word"))
+(define search-title-query   (otm-from-id-query "publication_search_title"   "word"))
+(define search-url-query     (otm-from-id-query "publication_search_url"     "word"))
+(define saved-by-query       (otm-from-id-query "publication_saved_by"       "username"))
+(define shared-by-query      (otm-from-id-query "publication_shared_by"      "username"))
+(define badged-by-query      (otm-from-id-query "publication_badged_by"      "username"))
+(define badged-kids-query    (otm-from-id-query "publication_badged_kids"    "kid_id"))
+(define cubbed-by-query      (otm-from-id-query "publication_cubbed_by"      "username"))
+(define kids-query           (otm-from-id-query "publication_kids"           "kid_id"))
+
 (define (db-load-publication id)
   (let*
-      ([by-id-query "select \"username\", \"time\", \"date\", \"url\", \"title\", \"mail\", \"tag\", \"tag2\", \"text\", \"md\", \"web_domain\", \"score\", \"deleted\", \"draft\", \"parent_id\", \"locked\", \"no_kill\" from \"publications\" where \"id\" =  $1"]
-  ; this could be made more efficient, by querying the type_id with the publication query, and passing the result here.
-  [type-query "select \"publication_type\" from \"publication_types\" where \"id\" = (select \"type_id\" from \"publications\" where \"id\" = $1);"]
-  [votes-query "select \"vote_id\", \"username\", \"up\", \"num\" from \"publication_votes\" where \"id\" = $1;"]
-  [ctags-query "select \"username\", \"tag\" from \"publication_community_tagses\" where \"id\" = $1;"]
-  [+type
-   (lambda (h)
+  ([+type
+     (lambda (h)
      (let* ([id (hash-ref h 'id)]
             [maybe-type-id (query-maybe-row db-conn type-query id)])
        (if (not maybe-type-id)
            h
            (hash-set h 'type (vector-ref maybe-type-id 0)))))]
   [+id (lambda (h id) (hash-set h 'id id))]
-  [otm-from-id-query (lambda (table value-column) (string-append "select \"" value-column "\" from \"" table "\" where \"id\" = $1;"))]
   [+otm
-   (lambda (h table value-column json-key)
+   (lambda (h stmt json-key)
      (let* ([id (hash-ref h 'id)]
-           [vals (query-rows db-conn (otm-from-id-query table value-column) id)]
+           [vals (query-rows db-conn stmt id)]
            [vals-list (map (lambda (val) (vector-ref val 0)) vals)])
        (hash-set h json-key vals-list)))]
-  [+cc (lambda (h) (+otm h "publication_cc" "username" 'cc))]
-  [+community-tags (lambda (h) (+otm h "publication_community_tags" "tag" 'community_tag))]
+  [+cc (lambda (h) (+otm h cc-query 'cc))]
+  [+community-tags (lambda (h) (+otm h community-tags-query 'community_tag))]
   [+community-tagses
    (lambda (h)
      (letrec ([id (hash-ref h 'id)]
@@ -264,15 +277,15 @@
                              [new-h (hash-set ctag-h (string->symbol (vector-ref ctag 0)) (vector-ref ctag 1))])
                         (acc new-h (rest ctags)))))])
                (hash-set h 'community_tags (acc (make-immutable-hash) ctags))))]
-  [+search-text (lambda (h) (+otm h "publication_search_text" "word" 'search_text))]
-  [+search-title (lambda (h) (+otm h "publication_search_title" "word" 'search_title))]
-  [+search-url (lambda (h) (+otm h "publication_search_url" "word" 'search_url))]
-  [+saved-by (lambda (h) (+otm h "publication_saved_by" "username" 'saved_by))]
-  [+shared-by (lambda (h) (+otm h "publication_shared_by" "username" 'shared_by))]
-  [+badged-by (lambda (h) (+otm h "publication_badged_by" "username" 'badged_by))]
-  [+badged-kids (lambda (h) (+otm h "publication_badged_kids" "kid_id" 'badged_kids))]
-  [+cubbed-by (lambda (h) (+otm h "publication_cubbed_by" "username" 'cubbed_by))]
-  [+kids (lambda (h) (+otm h "publication_kids" "kid_id" 'kids))]
+  [+search-text (lambda (h) (+otm h search-text-query 'search_text))]
+  [+search-title (lambda (h) (+otm h search-title-query 'search_title))]
+  [+search-url (lambda (h) (+otm h search-url-query 'search_url))]
+  [+saved-by (lambda (h) (+otm h saved-by-query 'saved_by))]
+  [+shared-by (lambda (h) (+otm h shared-by-query 'shared_by))]
+  [+badged-by (lambda (h) (+otm h badged-by-query 'badged_by))]
+  [+badged-kids (lambda (h) (+otm h badged-kids-query 'badged_kids))]
+  [+cubbed-by (lambda (h) (+otm h cubbed-by-query 'cubbed_by))]
+  [+kids (lambda (h) (+otm h kids-query 'kids))]
   [+votes
    (lambda (h)
      (let* ([id (hash-ref h 'id)]
