@@ -1,7 +1,7 @@
-; This file has been VERSIONED into the hub repo.
-; DO NOT change it from hub. Change in github.com/hubski/hubski,
-; and update the versioned file. Contributors WILL update this
-; file in hub without checking for changes.
+;; This file has been VERSIONED into the hub repo.
+;; DO NOT change it from hub. Change in github.com/hubski/hubski,
+;; and update the versioned file. Contributors WILL update this
+;; file in hub without checking for changes.
 
 #lang racket
 (require json)
