@@ -12,6 +12,7 @@
  db-save-publication
  db-load-publication
  db-get-publications
+ db-get-publications-public 
  db-save-publication-no-delete-no-transaction ; used by the conversion script, for speed
  db-has-community-tag?
  db-set-user-community-tag
@@ -82,10 +83,15 @@
 (define (pub-ids-list-vecs->jsexpr l)
   (map (lambda (id-vec) (vector-ref id-vec 0)) l))
 
+(define query-get-publications (virtual-statement "select id from publications;"))
 (define (db-get-publications)
-  (let* ([publication-ids-query "select \"id\" from \"publications\";"]
-        [pubs-vec (query-rows db-conn publication-ids-query)])
-    (pub-ids-list-vecs->jsexpr pubs-vec)))
+    (pub-ids-list-vecs->jsexpr (query-rows db-conn query-get-publications)))
+
+(define query-get-publications-public (virtual-statement "select id from publications where mail = false and deleted = false and draft = false;"))
+;; gets a list of publications (which is also a jsexpr), which are not mail, deleted, or drafts
+;; \todo add db indices for publications mail, deleted, draft
+(define (db-get-publications-public)
+    (pub-ids-list-vecs->jsexpr (query-rows db-conn query-get-publications-public)))
 
 (define (safe-car l)
   (if (not (pair? l)) l (car l)))
