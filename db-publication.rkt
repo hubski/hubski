@@ -3,16 +3,21 @@
 ;; and update the versioned file. Contributors WILL update this
 ;; file in hub without checking for changes.
 
-#lang racket
-(require db)
-(require racket/trace)
-(require "db.rkt")
+ #lang racket
+ (require db)
+ (require racket/trace)
+ (require "db.rkt")
 
 (provide
  db-save-publication
  db-load-publication
  db-get-publications
  db-save-publication-no-delete-no-transaction ; used by the conversion script, for speed
+ db-has-community-tag?
+ db-set-user-community-tag
+ db-get-commonest-community-tag
+ list->arc-list
+ arc-list->list 
  )
 
 (define (improper-list->list l)
@@ -40,6 +45,39 @@
         (if (not (equal? (last properlist) 'nil))
             properlist
             (take properlist (- (length properlist) 1))))))
+
+;; Horribly inefficient. See arc-list->list comment.
+(define (list->arc-list l)
+  (if (null? (cdr l))
+      (cons (car l) 'nil)
+      (cons (car l) (list->arc-list (cdr l)))))
+
+(define query-has-community-tag?
+  (virtual-statement "select count(1) from publication_community_tagses where id = $1::integer and username = $2::text;"))
+(define (db-has-community-tag? publication-id username)
+  (not (equal? 0 (query-value db-conn query-has-community-tag? publication-id username))))
+
+(define query-get-commonest-community-tag
+  (virtual-statement "select tag, count(tag) from publication_community_tagses where id = $1::integer group by tag order by count(tag) desc limit 1;"))
+;; \return A list, of the most common community tag, and the count.
+;;         If the publication has no ctags, returns ("" 0).
+(define (db-get-commonest-community-tag publication-id)
+  ;; (write-to-file "db-get-commonest-community-tag" "debug" #:exists 'append)
+  ;; (write-to-file publication-id "debug" #:exists 'append)
+  ;; (write-to-file "\n" "debug" #:exists 'append)
+  (let ([maybe-row (query-maybe-row db-conn query-get-commonest-community-tag publication-id)])
+    (if (equal? maybe-row #f)
+;;        (begin (write-to-file " maybe row false!\n" "debug" #:exists 'append)
+        '("" 0)
+        (list (vector-ref maybe-row 0) (vector-ref maybe-row 1)))))
+
+(define query-set-user-community-tag (virtual-statement "insert into publication_community_tagses (id, username, tag) values ($1::integer, $2::text, $3::text);"))
+(define query-delete-user-community-tag (virtual-statement "delete from publication_community_tagses where id = $1::integer and username = $2::text;"))
+(define (db-set-user-community-tag publication-id username ctag)
+  (db-transaction
+   (lambda ()
+     (query-exec db-conn query-delete-user-community-tag publication-id username)
+     (query-exec db-conn query-set-user-community-tag publication-id username ctag))))
 
 (define (pub-ids-list-vecs->jsexpr l)
   (map (lambda (id-vec) (vector-ref id-vec 0)) l))
@@ -102,10 +140,8 @@
     (query-exec db-conn query id)))
 
 (define (db-save-publication sexp)
-  (db-transaction (lambda ()
-;;                    (trace db-save-publication)
-                    (db-save-publication-no-transaction sexp)
-                    )))
+  (db-transaction
+   (lambda () (db-save-publication-no-transaction sexp))))
 
 (define (save-votes id votes)
   (let ([table "publication_votes"])
@@ -136,23 +172,6 @@
                    ))
                votes))
         void)))
-
-(define (save-community-tagses id arc-ctags)
-  ;; (write-to-file "save-community-tagses\n" "debug" #:exists 'append)  
-  (letrec ([table "publication_community_tagses"]
-           [ctags (arc-list->list arc-ctags)]
-           ;; [dbg0 (write-to-file ctags "debug" #:exists 'append)]
-           ;; [dbg1 (write-to-file "\n" "debug" #:exists 'append)]
-           [acc (lambda (id ctags)
-                  (if (or (equal? ctags sql-null) (empty? ctags)) void ;; (write-to-file "ctags empty!\n" "debug" #:exists 'append)
-                      (let* ([ctagpair (arc-list->list (first ctags))]
-                             [ctag (first ctagpair)]
-                             [username (second ctagpair)])
-                        (query-exec db-conn (string-append "insert into \"" table "\" (id, username, tag) values ($1::integer, $2::text, $3::text);")
-                                    id username ctag)
-                        (acc id (rest ctags)))))])
-    (query-exec db-conn (string-append "delete from \"" table "\" where \"id\" = $1::integer;") id)
-    (acc id ctags)))
     
 ;; \todo fix to delete from otm tables
 (define (db-save-publication-no-transaction sexp)
@@ -227,7 +246,6 @@
   [p-no-kill (sqlnil (safe-member keys 'nokill))]
   [p-cc (arc-list->list (sqlnil (val-if h 'cc)))]
   [p-ctags (arc-list->list (sqlnil (val-if h 'ctag)))]
-  [p-ctagses (arc-list->list (sqlnil (val-if h 'ctags)))]
   [p-search-text (arc-list->list (sqlnil  (safe-car (val-if h 'searchtext))))]
   [p-search-title (arc-list->list (sqlnil (safe-car (val-if h 'searchtitle))))]
   [p-search-url (arc-list->list (sqlnil (val-if h 'searchurl)))]
@@ -258,7 +276,6 @@
  ;; (write-to-file "locked: " "debug" #:exists 'append)    (write-to-file p-locked "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
  ;; (write-to-file "nokill: " "debug" #:exists 'append)    (write-to-file p-no-kill "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
  ;; (write-to-file "ctags: " "debug" #:exists 'append)     (write-to-file p-ctags "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
- ;; (write-to-file "ctagses: " "debug" #:exists 'append)   (write-to-file p-ctagses "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
  ;; (write-to-file "votes: " "debug" #:exists 'append)     (write-to-file p-votes "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
  ;; (write-to-file "savedby: " "debug" #:exists 'append)   (write-to-file p-saved-by "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
  ;; (write-to-file "sharedby: " "debug" #:exists 'append)  (write-to-file p-shared-by "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
@@ -274,7 +291,6 @@
  (query-exec db-conn "insert into \"publications\" (id, type_id, username, time, date, url, title, mail, tag, tag2, text, md, web_domain, score, deleted, draft, parent_id, locked, no_kill) values ($1::integer, $2::integer, $3::text, $4::integer, $5::text, $6::text, $7::text, $8::boolean, $9::text, $10::text, $11::text, $12::text, $13::text, $14::integer, $15::boolean, $16::boolean, $17::integer, $18::boolean, $19::boolean);" p-id p-type p-username p-time p-date p-url p-title p-mail p-tag p-tag2 p-text p-md p-webdomain p-score p-deleted p-draft p-parent-id p-locked p-no-kill)
   (save-cc p-id p-cc)  
   (save-community-tags p-id p-ctags)  
-  (save-community-tagses p-id p-ctagses)  
   (save-search-text p-id p-search-text)  
   (save-search-title p-id p-search-title)  
   (save-search-url p-id p-search-url)
@@ -321,7 +337,6 @@
 (define votes-query (virtual-statement "select \"vote_id\", \"username\", \"up\", \"num\" from \"publication_votes\" where \"id\" = $1;"))
 (define (otm-from-id-query table value-column) (virtual-statement (string-append "select \"" value-column "\" from \"" table "\" where \"id\" = $1;")))
 (define cc-query             (otm-from-id-query "publication_cc"             "username"))
-(define ctags-query (virtual-statement "select \"username\", \"tag\" from \"publication_community_tagses\" where \"id\" = $1;"))
 (define community-tags-query (otm-from-id-query "publication_community_tags" "tag"))
 (define search-text-query    (otm-from-id-query "publication_search_text"    "word"))
 (define search-title-query   (otm-from-id-query "publication_search_title"   "word"))
@@ -351,17 +366,6 @@
        (hash-set h json-key vals-list)))]
   [+cc (lambda (h) (+otm h cc-query 'cc))]
   [+community-tags (lambda (h) (+otm h community-tags-query 'community_tag))]
-  [+community-tagses
-   (lambda (h)
-     (letrec ([id (hash-ref h 'id)]
-               [ctags (query-rows db-conn ctags-query id)]
-               [acc
-                (lambda (ctag-h ctags)
-                  (if (empty? ctags) ctag-h
-                      (let* ([ctag (first ctags)]
-                             [new-h (hash-set ctag-h (string->symbol (vector-ref ctag 0)) (vector-ref ctag 1))])
-                        (acc new-h (rest ctags)))))])
-               (hash-set h 'community_tags (acc (make-immutable-hash) ctags))))]
   [+search-text (lambda (h) (+otm h search-text-query 'search_text))]
   [+search-title (lambda (h) (+otm h search-title-query 'search_title))]
   [+search-url (lambda (h) (+otm h search-url-query 'search_url))]
@@ -397,11 +401,10 @@
         (+search-url
         (+search-title
         (+search-text
-        (+community-tagses
         (+community-tags
         (+cc
         (+type
-        (+id (pub-vec->jsexpr maybe-pub-vec) id))))))))))))))))))
+        (+id (pub-vec->jsexpr maybe-pub-vec) id)))))))))))))))))
 
 (define (db-save-publication-no-delete sexp)
   (db-transaction (lambda () (db-save-publication-no-delete-no-transaction sexp))))

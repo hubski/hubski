@@ -11,7 +11,8 @@
  pub-sexp->jsexpr
  publication-jsexpr?
  try-string->jsexpr
- pub-sexp->pub-hash 
+ pub-sexp->pub-hash
+ bool->arc-bool 
  )
 
 (define (try-string->jsexpr s)
@@ -99,7 +100,6 @@
   (list-add-hash-member        j 'cubbed_by      'cubbedby
   (list-add-hash-member        j 'badged_kids    'badgedkids
   (list-add-hash-member        j 'saved_by       'savedby
-  (list-add-hash-member-community-tags j
   (list-add-hash-member        j 'community_tag  'ctag
   ; ptag?
   (list-add-hash-member-bool   j 'mail           'mail
@@ -127,7 +127,7 @@
   (list-add-hash-member-bool   j 'no_kill        'nokill
   (list-add-hash-member-bool   j 'locked         'locked
   '()
-  ))))))))))))))))))))))))))))))))))
+  )))))))))))))))))))))))))))))))))
 
 (define (pub-sexp->pub-hash s)
   (letrec ([acc (lambda (s h)
@@ -219,7 +219,6 @@
      'cubbed_by      (get-list h 'cubbedby)
      'badged_kids    (get-list h 'badgedkids)
      'saved_by       (get-list h 'savedby)
-     'community_tags (community-tags-list->hash h 'ctags)
      'community_tag  (get-list h 'ctag)
      ; ptag?   
      'mail           (get-bool h 'mail)
@@ -277,7 +276,6 @@
         (hash-has-key? p 'cubbed_by)
         (hash-has-key? p 'badged_kids)
         (hash-has-key? p 'saved_by)
-        (hash-has-key? p 'community_tags)
         (hash-has-key? p 'community_tag)
         ;; ; ptag?
         (hash-has-key? p 'mail)
