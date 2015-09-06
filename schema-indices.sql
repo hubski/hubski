@@ -12,3 +12,6 @@ create index publication_search_url_id_idx on publication_search_url (id);
 create index publication_shared_by_id_idx on publication_shared_by (id);
 create index publication_votes_id_idx on publication_votes (id);
 create index publications_id_idx on publications (id);
+create index publications_mail_idx on publications (mail);
+create index publications_deleted_idx on publications (deleted);
+create index publications_draft_idx on publications (draft);
