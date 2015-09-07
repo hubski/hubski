@@ -15,3 +15,5 @@ create index publications_id_idx on publications (id);
 create index publications_mail_idx on publications (mail);
 create index publications_deleted_idx on publications (deleted);
 create index publications_draft_idx on publications (draft);
+create index publication_community_tagses_username_idx on publication_community_tagses (username);
+create index publication_community_tagses_tag_idx on publication_community_tagses (tag);
