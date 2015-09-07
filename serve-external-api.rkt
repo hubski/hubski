@@ -36,19 +36,14 @@
 (define (make-response-jsexpr jsexpr)
   (make-response-string (jsexpr->string jsexpr)))
 
-;; Whether the publication is publically viewable, or private to certain users.
-;; \todo add contract
-;; \todo move to publications.rkt
-(define (publication-is-public p)
-  (not (or (hash-ref p 'mail)
-           (hash-ref p 'draft)
-           (hash-ref p 'deleted))))
-
 (define (serve-publication req id)
   (let ([p (db-load-publication id)])
     (if (or (equal? p 'null) (publication-is-public p))
         (make-response-jsexpr p)
         (make-response-jsexpr 'null))))
+
+(define (serve-publication-tree req id)
+  (make-response-jsexpr (db-get-publication-recursive-public id)))
 
 (define (serve-publications req)
   (make-response-jsexpr (db-get-publications-public)))
@@ -56,6 +51,7 @@
 (define-values (blog-dispatch blog-url)
   (dispatch-rules
    [("publication" (integer-arg)) #:method "get" serve-publication]
+   [("publication" (integer-arg) "tree") #:method "get" serve-publication-tree]
    [("publications") #:method "get" serve-publications]
    [else serve-api-info]))
 

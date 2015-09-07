@@ -12,8 +12,16 @@
  publication-jsexpr?
  try-string->jsexpr
  pub-sexp->pub-hash
- bool->arc-bool 
+ bool->arc-bool
+ publication-is-public
  )
+
+;; Whether the publication is publically viewable, or private to certain users.
+;; \todo add contract
+(define (publication-is-public p)
+  (not (or (hash-ref p 'mail)
+           (hash-ref p 'draft)
+           (hash-ref p 'deleted))))
 
 (define (try-string->jsexpr s)
   (with-handlers ([exn:fail:read? (lambda (e) 'nil)]) (string->jsexpr s)))

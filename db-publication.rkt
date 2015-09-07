@@ -3,10 +3,11 @@
 ;; and update the versioned file. Contributors WILL update this
 ;; file in hub without checking for changes.
 
- #lang racket
- (require db)
- (require racket/trace)
- (require "db.rkt")
+#lang racket
+(require db)
+(require racket/trace)
+(require "db.rkt")
+(require "publications.rkt")
 
 (provide
  db-save-publication
@@ -17,8 +18,9 @@
  db-has-community-tag?
  db-set-user-community-tag
  db-get-commonest-community-tag
+ db-get-publication-recursive-public
  list->arc-list
- arc-list->list 
+ arc-list->list
  )
 
 (define (improper-list->list l)
@@ -89,9 +91,31 @@
 
 (define query-get-publications-public (virtual-statement "select id from publications where mail = false and deleted = false and draft = false;"))
 ;; gets a list of publications (which is also a jsexpr), which are not mail, deleted, or drafts
-;; \todo add db indices for publications mail, deleted, draft
 (define (db-get-publications-public)
     (pub-ids-list-vecs->jsexpr (query-rows db-conn query-get-publications-public)))
+
+;; \todo define the list of publication columns, instead of duplicating them everywhere.
+(define query-get-publication-recursive (virtual-statement "with recursive pubchilds(username, time, date, url, title, mail, tag, tag2, text, md, web_domain, score, deleted, draft, parent_id, locked, no_kill, id) as (select username, time, date, url, title, mail, tag, tag2, text, md, web_domain, score, deleted, draft, parent_id, locked, no_kill, id from publications where id = $1::integer union all select p.username, p.time, p.date, p.url, p.title, p.mail, p.tag, p.tag2, p.text, p.md, p.web_domain, p.score, p.deleted, p.draft, p.parent_id, p.locked, p.no_kill, p.id from pubchilds c, publications p where p.parent_id = c.id) select username, time, date, url, title, mail, tag, tag2, text, md, web_domain, score, deleted, draft, parent_id, locked, no_kill, id from pubchilds;"))
+;; Returns a jsexpr of the requested publication and all its descendants.
+;; NOTE this does NOT filter for public.
+;; DO NOT expose this publically before filtering mail,deleted,draft.
+(define (db-get-publication-recursive-public id)
+  (letrec ([jsexpr-pubs-list->jsexpr-recursive-pub
+            (lambda (l root-id)
+              (letrec ([pub-add-children
+                        (lambda (p plist)
+                          (let ([children (filter (lambda (child) (eq? (hash-ref child 'parent_id) (hash-ref p 'id))) plist)])
+                            (if (empty? children) p
+                                (let ([recursive-added-children (map (lambda (child) (pub-add-children child plist)) children)])
+                                  (hash-set p 'children recursive-added-children)))))])
+                (if (or (not (list? l)) (empty? l)) 'null
+                    (let ([pub (findf (lambda (p) (equal? root-id (hash-ref p 'id))) l)])
+                      (if (equal? pub #f) 'null (pub-add-children pub l))))))]
+           [all-pubs-vecs (query-rows db-conn query-get-publication-recursive id)]
+           [all-pubs-jsexprs (map pub-vec-id->jsexpr all-pubs-vecs)]
+           [pubs (filter publication-is-public all-pubs-jsexprs)])
+    (if (empty? pubs) 'null
+        (jsexpr-pubs-list->jsexpr-recursive-pub pubs id))))
 
 (define (safe-car l)
   (if (not (pair? l)) l (car l)))
@@ -316,6 +340,9 @@
 (define (sql-null->null val)
   (if (equal? val sql-null) 'null val))
 
+(define (+id h id)
+  (hash-set h 'id id))
+
 (define (pub-vec->jsexpr v)
   (hasheq
    'user      (sql-null->null (vector-ref v 0))
@@ -336,6 +363,9 @@
    'locked    (sql-null->null (vector-ref v 15))
    'no_kill   (sql-null->null (vector-ref v 16))
    ))
+
+(define (pub-vec-id->jsexpr v)
+  (+id (pub-vec->jsexpr v) (sql-null->null (vector-ref v 17))))
 
 (define by-id-query  (virtual-statement "select \"username\", \"time\", \"date\", \"url\", \"title\", \"mail\", \"tag\", \"tag2\", \"text\", \"md\", \"web_domain\", \"score\", \"deleted\", \"draft\", \"parent_id\", \"locked\", \"no_kill\" from \"publications\" where \"id\" =  $1"))
 ; this could be made more efficient, by querying the type_id with the publication query, and passing the result here.
@@ -363,7 +393,6 @@
        (if (not maybe-type-id)
            h
            (hash-set h 'type (vector-ref maybe-type-id 0)))))]
-  [+id (lambda (h id) (hash-set h 'id id))]
   [+otm
    (lambda (h stmt json-key)
      (let* ([id (hash-ref h 'id)]
