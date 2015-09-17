@@ -14,8 +14,9 @@
 (define (make-response-string str)
   (response
    200 #"OK"
-   (current-seconds) #"application/json; charset=utf-8"
-   empty
+   (current-seconds)
+   #"application/json; charset=utf-8"
+   (list (make-header #"Access-Control-Allow-Origin" #"*"))
    (λ (op) (write-string str op))))
 
 ;; \todo get endpoints dynamically. Remove /api/ ?
