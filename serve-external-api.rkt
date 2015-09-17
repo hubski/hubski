@@ -14,7 +14,7 @@
 (define (make-response-string str)
   (response
    200 #"OK"
-   (current-seconds) TEXT/HTML-MIME-TYPE
+   (current-seconds) #"application/json; charset=utf-8"
    empty
    (λ (op) (write-string str op))))
 
