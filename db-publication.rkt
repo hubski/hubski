@@ -106,11 +106,15 @@
 (define (db-get-publications-public)
     (pub-ids-list-vecs->jsexpr (query-rows db-conn query-get-publications-public)))
 
+(define (+id h id)
+  (hash-set h 'id id))
+
+(define (pub-vec-id->jsexpr v)
+  (+id (pub-vec->jsexpr v) (sql-null->null (vector-ref v 16))))
+
 ;; \todo define the list of publication columns, instead of duplicating them everywhere.
-(define query-get-publication-recursive (virtual-statement "with recursive pubchilds(username, time, date, url, title, mail, tag, tag2, text, md, web_domain, score, deleted, draft, parent_id, locked, no_kill, id) as (select username, time, date, url, title, mail, tag, tag2, text, md, web_domain, score, deleted, draft, parent_id, locked, no_kill, id from publications where id = $1::integer union all select p.username, p.time, p.date, p.url, p.title, p.mail, p.tag, p.tag2, p.text, p.md, p.web_domain, p.score, p.deleted, p.draft, p.parent_id, p.locked, p.no_kill, p.id from pubchilds c, publications p where p.parent_id = c.id) select username, time, date, url, title, mail, tag, tag2, text, md, web_domain, score, deleted, draft, parent_id, locked, no_kill, id from pubchilds;"))
+(define query-get-publication-recursive (virtual-statement "with recursive pubchilds(username, time, date, url, title, mail, tag, tag2, text, web_domain, score, deleted, draft, parent_id, locked, no_kill, id) as (select username, time, date, url, title, mail, tag, tag2, text, web_domain, score, deleted, draft, parent_id, locked, no_kill, id from publications where id = $1::integer union all select p.username, p.time, p.date, p.url, p.title, p.mail, p.tag, p.tag2, p.text, p.web_domain, p.score, p.deleted, p.draft, p.parent_id, p.locked, p.no_kill, p.id from pubchilds c, publications p where p.parent_id = c.id) select username, time, date, url, title, mail, tag, tag2, text, web_domain, score, deleted, draft, parent_id, locked, no_kill, id from pubchilds;"))
 ;; Returns a jsexpr of the requested publication and all its descendants.
-;; NOTE this does NOT filter for public.
-;; DO NOT expose this publically before filtering mail,deleted,draft.
 (define (db-get-publication-recursive-public id)
   (letrec ([jsexpr-pubs-list->jsexpr-recursive-pub
             (λ (l root-id)
@@ -347,7 +351,6 @@
        (if (not maybe-type-id)
            h
            (hash-set h 'type (vector-ref maybe-type-id 0)))))]
-  [+id (lambda (h id) (hash-set h 'id id))]
   [+otm
    (lambda (h stmt json-key)
      (let* ([id (hash-ref h 'id)]
