@@ -10,10 +10,11 @@
 (require "publications.rkt")
 
 (provide
- db-save-publication
+ db-insert-publication
+ db-update-publication
  db-load-publication
  db-get-publications
- db-get-publications-public 
+ db-get-publications-public
  db-save-publication-no-delete-no-transaction ; used by the conversion script, for speed
  db-has-community-tag?
  db-set-user-community-tag
@@ -21,6 +22,8 @@
  db-get-publication-recursive-public
  list->arc-list
  arc-list->list
+ db-set-md
+ db-get-md
  )
 
 (define (improper-list->list l)
@@ -55,6 +58,18 @@
       (cons (car l) 'nil)
       (cons (car l) (list->arc-list (cdr l)))))
 
+(define query-get-md
+  (virtual-statement "select md from publications where id = $1::integer;"))
+;; \return the md for the given publication, or #f if the id does not exist
+(define (db-get-md publication-id)
+  (query-value db-conn query-get-md publication-id))
+
+(define query-set-md
+  (virtual-statement "update publications set md = $1::text where id = $2::integer;"))
+;; \return the md for the given publication, or #f if the id does not exist
+(define (db-set-md publication-id md)
+  (query-exec db-conn query-set-md md publication-id))
+
 (define query-has-community-tag?
   (virtual-statement "select count(1) from publication_community_tagses where id = $1::integer and username = $2::text;"))
 (define (db-has-community-tag? publication-id username)
@@ -65,12 +80,8 @@
 ;; \return A list, of the most common community tag, and the count.
 ;;         If the publication has no ctags, returns ("" 0).
 (define (db-get-commonest-community-tag publication-id)
-  ;; (write-to-file "db-get-commonest-community-tag" "debug" #:exists 'append)
-  ;; (write-to-file publication-id "debug" #:exists 'append)
-  ;; (write-to-file "\n" "debug" #:exists 'append)
   (let ([maybe-row (query-maybe-row db-conn query-get-commonest-community-tag publication-id)])
     (if (equal? maybe-row #f)
-;;        (begin (write-to-file " maybe row false!\n" "debug" #:exists 'append)
         '("" 0)
         (list (vector-ref maybe-row 0) (vector-ref maybe-row 1)))))
 
@@ -91,6 +102,7 @@
 
 (define query-get-publications-public (virtual-statement "select id from publications where mail = false and deleted = false and draft = false;"))
 ;; gets a list of publications (which is also a jsexpr), which are not mail, deleted, or drafts
+;; \todo add db indices for publications mail, deleted, draft
 (define (db-get-publications-public)
     (pub-ids-list-vecs->jsexpr (query-rows db-conn query-get-publications-public)))
 
@@ -101,15 +113,15 @@
 ;; DO NOT expose this publically before filtering mail,deleted,draft.
 (define (db-get-publication-recursive-public id)
   (letrec ([jsexpr-pubs-list->jsexpr-recursive-pub
-            (lambda (l root-id)
+            (λ (l root-id)
               (letrec ([pub-add-children
-                        (lambda (p plist)
-                          (let ([children (filter (lambda (child) (eq? (hash-ref child 'parent_id) (hash-ref p 'id))) plist)])
+                        (λ (p plist)
+                          (let ([children (filter (λ (child) (eq? (hash-ref child 'parent_id) (hash-ref p 'id))) plist)])
                             (if (empty? children) p
-                                (let ([recursive-added-children (map (lambda (child) (pub-add-children child plist)) children)])
+                                (let ([recursive-added-children (map (λ (child) (pub-add-children child plist)) children)])
                                   (hash-set p 'children recursive-added-children)))))])
                 (if (or (not (list? l)) (empty? l)) 'null
-                    (let ([pub (findf (lambda (p) (equal? root-id (hash-ref p 'id))) l)])
+                    (let ([pub (findf (λ (p) (equal? root-id (hash-ref p 'id))) l)])
                       (if (equal? pub #f) 'null (pub-add-children pub l))))))]
            [all-pubs-vecs (query-rows db-conn query-get-publication-recursive id)]
            [all-pubs-jsexprs (map pub-vec-id->jsexpr all-pubs-vecs)]
@@ -148,37 +160,23 @@
 ; this lets us insert into them easily.
 (define (db-insert-idval id val table val-column)
   (let ([query (string-append "insert into \"" table "\" (id, \"" val-column "\") values ($1, $2);")])
-    ;; (write-to-file "db-insert-idval" "debug" #:exists 'append)
-    ;; (write-to-file id "debug" #:exists 'append)
-    ;; (write-to-file " " "debug" #:exists 'append)
-    ;; (write-to-file val "debug" #:exists 'append)
-    ;; (write-to-file " " "debug" #:exists 'append)
-    ;; (write-to-file table "debug" #:exists 'append)
-    ;; (write-to-file " " "debug" #:exists 'append)
-    ;; (write-to-file val-column "debug" #:exists 'append)
-    ;; (write-to-file "\n" "debug" #:exists 'append)
     (query-exec db-conn query id val)))
 
   ; used for deleting one-to-many table ids before insertion
 (define (db-delete-from table id)
   (let ([query (string-append "delete from \"" table "\" where \"id\" = $1::integer;")])
-    ;; (write-to-file "deleting " "debug" #:exists 'append)
-    ;; (write-to-file table "debug" #:exists 'append)
-    ;; (write-to-file " " "debug" #:exists 'append)
-    ;; (write-to-file id "debug" #:exists 'append)
-    ;; (write-to-file "\n" "debug" #:exists 'append)
     (query-exec db-conn query id)))
 
-(define (db-save-publication sexp)
+(define (db-insert-publication sexp)
   (db-transaction
-   (lambda () (db-save-publication-no-transaction sexp))))
+   (lambda () (db-save-publication-no-transaction sexp #t))))
+
+(define (db-update-publication sexp)
+  (db-transaction
+   (lambda () (db-save-publication-no-transaction sexp #f))))
 
 (define (save-votes id votes)
   (let ([table "publication_votes"])
-    ;; (write-to-file "save-votes " "debug" #:exists 'append)
-    ;; (write-to-file id "debug" #:exists 'append)
-    ;; (write-to-file " " "debug" #:exists 'append)
-    ;; (write-to-file votes "debug" #:exists 'append)
     (if (and (list? votes) (not (empty? votes)))
         (begin
           (db-delete-from table id)
@@ -202,146 +200,106 @@
                    ))
                votes))
         void)))
-    
-;; \todo fix to delete from otm tables
-(define (db-save-publication-no-transaction sexp)
+
+(define query-delete-publication (virtual-statement "delete from \"publications\" where \"id\" = $1::integer;"))
+(define query-insert-publication (virtual-statement "insert into \"publications\" (id, type_id, username, time, date, url, title, mail, tag, tag2, text, web_domain, score, deleted, draft, parent_id, locked, no_kill) values ($1::integer, $2::integer, $3::text, $4::integer, $5::text, $6::text, $7::text, $8::boolean, $9::text, $10::text, $11::text, $12::text, $13::integer, $14::boolean, $15::boolean, $16::integer, $17::boolean, $18::boolean);"))
+(define query-update-publication (virtual-statement "update publications set type_id = $1::integer, username = $2::text, time = $3::integer, date = $4::text, url = $5::text, title = $6::text, mail = $7::boolean, tag = $8::text, tag2 = $9::text, text = $10::text, web_domain = $11::text, score = $12::integer, deleted = $13::boolean, draft = $14::boolean, parent_id = $15::integer, locked = $16::boolean, no_kill = $17::boolean where id = $18::integer;"))
+;; insert or update a publication.
+;; \param sexp the publication s-expression to insert or update
+;; \param insert boolean, whether to insert or update
+(define (db-save-publication-no-transaction sexp insert)
   (let*
-   (
-    [save-valid? (lambda (v) (not (or (equal? v 'nil) (equal? v sql-null))))]
-    [save-otm-pair-no-delete
-     (lambda (id vals table val-column)
-       (if (and (list? vals) (save-valid? id))
-           (map (lambda (val)
-                  (if (save-valid? val)
-                      (db-insert-idval id val table val-column)
-                      void)
-                  ) vals)
-           void))]
-    [save-otm-pair
-     ; NOTE this doesn't delete, if the value(s) are all nil. This is how the old temstore works. I think.
-     (lambda (id vals table val-column)
-       (let ([valid-vals (if (pair? vals) (filter save-valid? vals) '())])
-         ;; (write-to-file "save-otm-pair " "debug" #:exists 'append)
-         ;; (write-to-file id "debug" #:exists 'append)
-         ;; (write-to-file " " "debug" #:exists 'append)
-         ;; (write-to-file vals "debug" #:exists 'append)
-         ;; (write-to-file " " "debug" #:exists 'append)
-         ;; (write-to-file valid-vals "debug" #:exists 'append)
-         ;; (write-to-file "\n" "debug" #:exists 'append)
-         (if (or (not (save-valid? id)) (empty? valid-vals)) void
-             (begin
-               (db-delete-from table id)
-               (save-otm-pair-no-delete id valid-vals table val-column)))))]
-    [save-cc (lambda (id ccs) (save-otm-pair id ccs "publication_cc" "username"))]
-    [save-community-tags (lambda (id ctags) (save-otm-pair id ctags "publication_community_tags" "tag"))]       
-    [save-search-text (lambda (id lst) (save-otm-pair id lst "publication_search_text" "word"))]
-    [save-search-title (lambda (id lst) (save-otm-pair id lst "publication_search_title" "word"))]
-    [save-search-url (lambda (id lst) (save-otm-pair id lst "publication_search_url" "word"))]
-  [save-saved-by (lambda (id lst) (save-otm-pair id lst "publication_saved_by" "username"))]
-  [save-shared-by (lambda (id lst) (save-otm-pair id lst "publication_shared_by" "username"))]
-  [save-badged-by (lambda (id lst) (save-otm-pair id lst "publication_badged_by" "username"))]
-  [save-badged-kids (lambda (id lst) (save-otm-pair id lst "publication_badged_kids" "kid_id"))]
-  [save-cubbed-by (lambda (id lst) (save-otm-pair id lst "publication_cubbed_by" "username"))]
-  [save-kids  (lambda (id lst) (save-otm-pair id lst "publication_kids" "kid_id"))]
-  ;; [save-kid   (lambda (id kid)
-  ;;               (let* ([table "publication_kids"]
-  ;;                      [column "kid_id"]
-  ;;                      [delete-query (string-append "delete from \"" table "\" where \"id\" = $1::integer and \"" column "\" = $2::integer;")])
-  ;;                 (if (and (save-valid? id) (save-valid? kid))
-  ;;                          (query-exec db-conn delete-query id kid)
-  ;;                          void)
-  ;;                 (save-otm-pair-no-delete id (list kid) table column)))] ; DOES NOT delete other existing children
-  [type-id-story (get-type-id "story" db-conn)]
-  [type-id-comment (get-type-id "comment" db-conn)]
-  [h (make-hash sexp)]
-  [p-id (sqlnil (safe-car (val-if h 'id)))]
-  [p-type (sqlnil (type->id (safe-car (val-if h 'type)) type-id-story type-id-comment))]
-  [p-username (sqlnil (safe-car (val-if h 'by)))]
-  [p-time (sqlnil (safe-car (val-if h 'time)))]
-  [p-date (sqlnil (safe-car (val-if h 'date)))]
-  [p-url (sqlnil (safe-car (val-if h 'url)))]
-  [p-title (sqlnil (safe-car (val-if h 'title)))]
-  [p-mail (sqlnil (not (equal? 'nil (safe-car (val-if h 'mail)))))]
-  [p-tag (sqlnil (safe-car (safe-car (val-if h 'tag))))]
-  [p-tag2 (sqlnil (safe-car (safe-car (val-if h 'tag2))))]
-  [p-text (sqlnil (safe-car (val-if h 'text)))]
-  [p-md (sqlnil (safe-car (val-if h 'md)))]
-  [p-webdomain (sqlnil (safe-car (safe-car (val-if h 'domain))))]
-  [p-score (sqlnil (safe-car (val-if h 'score)))]
-  [p-deleted (sqlnil (not (equal? 'nil(val-if h 'deleted))))]
-  [p-draft (sqlnil (not (equal? 'nil (val-if h 'draft))))]
-  [p-parent-id (sqlnil (val-if h 'parent))]
-  [keys (sqlnil (val-if h 'keys))]
-  [p-locked (sqlnil (safe-member keys 'locked))]
-  [p-no-kill (sqlnil (safe-member keys 'nokill))]
-  [p-cc (arc-list->list (sqlnil (val-if h 'cc)))]
-  [p-ctags (arc-list->list (sqlnil (val-if h 'ctag)))]
-  [p-search-text (arc-list->list (sqlnil  (safe-car (val-if h 'searchtext))))]
-  [p-search-title (arc-list->list (sqlnil (safe-car (val-if h 'searchtitle))))]
-  [p-search-url (arc-list->list (sqlnil (val-if h 'searchurl)))]
-  [p-votes (arc-list->list (sqlnil     (val-if h 'votes)))]
-  [p-saved-by (arc-list->list (sqlnil  (val-if h 'savedby)))]
-  [p-shared-by (arc-list->list (sqlnil (val-if h 'sharedby)))]
-  [p-badged-by (arc-list->list (sqlnil (val-if h 'badgedby)))]
-  [p-badged-kids (arc-list->list (sqlnil (val-if h 'badgedkids)))]
-  [p-cubbed-by (arc-list->list (sqlnil (val-if h 'cubbedby)))]
-  [p-kids (arc-list->list (sqlnil (val-if h 'kids)))])
- ;; (write-to-file (string-append "db-save-publication "  (number->string p-id) " starting") "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
- ;; (write-to-file "type: " "debug" #:exists 'append)      (write-to-file p-type "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
- ;; (write-to-file "user: " "debug" #:exists 'append)      (write-to-file p-username "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
- ;; (write-to-file "time: " "debug" #:exists 'append)      (write-to-file p-time "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
- ;; (write-to-file "date: " "debug" #:exists 'append)      (write-to-file p-date "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
- ;; (write-to-file "url: " "debug" #:exists 'append)       (write-to-file p-url "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
- ;; (write-to-file "title: " "debug" #:exists 'append)     (write-to-file p-title "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
- ;; (write-to-file "mail: " "debug" #:exists 'append)      (write-to-file p-mail "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
- ;; (write-to-file "tag: " "debug" #:exists 'append)       (write-to-file p-tag "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
- ;; (write-to-file "tag2: " "debug" #:exists 'append)      (write-to-file p-tag2 "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
- ;; (write-to-file "text: " "debug" #:exists 'append)      (write-to-file p-text "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
- ;; (write-to-file "md: " "debug" #:exists 'append)        (write-to-file p-md "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
- ;; (write-to-file "webdomain: " "debug" #:exists 'append) (write-to-file p-webdomain "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
- ;; (write-to-file "score: " "debug" #:exists 'append)     (write-to-file p-score "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
- ;; (write-to-file "deleted: " "debug" #:exists 'append)   (write-to-file p-deleted "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
- ;; (write-to-file "draft: " "debug" #:exists 'append)     (write-to-file p-draft "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
- ;; (write-to-file "parentid: " "debug" #:exists 'append)  (write-to-file p-parent-id "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
- ;; (write-to-file "locked: " "debug" #:exists 'append)    (write-to-file p-locked "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
- ;; (write-to-file "nokill: " "debug" #:exists 'append)    (write-to-file p-no-kill "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
- ;; (write-to-file "ctags: " "debug" #:exists 'append)     (write-to-file p-ctags "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
- ;; (write-to-file "votes: " "debug" #:exists 'append)     (write-to-file p-votes "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
- ;; (write-to-file "savedby: " "debug" #:exists 'append)   (write-to-file p-saved-by "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
- ;; (write-to-file "sharedby: " "debug" #:exists 'append)  (write-to-file p-shared-by "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
- ;; (write-to-file "badgedby: " "debug" #:exists 'append)  (write-to-file p-badged-by "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
- ;; (write-to-file "badgedkids: " "debug" #:exists 'append)(write-to-file p-badged-kids "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
- ;; (write-to-file "cubbedby: " "debug" #:exists 'append)  (write-to-file p-cubbed-by "debug" #:exists 'append) (write-to-file "\n" "debug" #:exists 'append)
- ;; (write-to-file "kids: " "debug" #:exists 'append)      (write-to-file p-kids "debug" #:exists 'append) (write-to-file "\n\n" "debug" #:exists 'append)
-  
-  ;; MUST use a transaction. Because we delete-then-insert, removing the transaction would be a race condition.
-  (query-exec db-conn "BEGIN;") 
-  ;; \todo change to use upsert, when we update to postgresl 9.5
-  (query-exec db-conn "delete from \"publications\" where \"id\" = $1::integer;" p-id)
- (query-exec db-conn "insert into \"publications\" (id, type_id, username, time, date, url, title, mail, tag, tag2, text, md, web_domain, score, deleted, draft, parent_id, locked, no_kill) values ($1::integer, $2::integer, $3::text, $4::integer, $5::text, $6::text, $7::text, $8::boolean, $9::text, $10::text, $11::text, $12::text, $13::text, $14::integer, $15::boolean, $16::boolean, $17::integer, $18::boolean, $19::boolean);" p-id p-type p-username p-time p-date p-url p-title p-mail p-tag p-tag2 p-text p-md p-webdomain p-score p-deleted p-draft p-parent-id p-locked p-no-kill)
-  (save-cc p-id p-cc)  
-  (save-community-tags p-id p-ctags)  
-  (save-search-text p-id p-search-text)  
-  (save-search-title p-id p-search-title)  
-  (save-search-url p-id p-search-url)
-  (save-votes p-id p-votes)
-  (save-saved-by p-id p-saved-by)  
-  (save-shared-by p-id p-shared-by)
-  (save-badged-by p-id p-badged-by)
-  (save-badged-kids p-id p-badged-kids)
-  (save-cubbed-by p-id p-cubbed-by)
-  (save-kids p-id p-kids)
-  ;; (save-kid p-parent-id p-id)
-  (query-exec db-conn "COMMIT;")
-  ;; (write "db-save-publication finished") (newline) 
-  (void)))
+      (
+       [save-valid? (lambda (v) (not (or (equal? v 'nil) (equal? v sql-null))))]
+       [save-otm-pair-no-delete
+        (lambda (id vals table val-column)
+          (if (and (list? vals) (save-valid? id))
+              (map (lambda (val)
+                     (if (save-valid? val)
+                         (db-insert-idval id val table val-column)
+                         void)
+                     ) vals)
+              void))]
+       [save-otm-pair
+        ; NOTE this doesn't delete, if the value(s) are all nil. This is how the old temstore works. I think.
+        (lambda (id vals table val-column)
+          (let ([valid-vals (if (pair? vals) (filter save-valid? vals) '())])
+            (if (or (not (save-valid? id)) (empty? valid-vals)) void
+                (begin
+                  (db-delete-from table id)
+                  (save-otm-pair-no-delete id valid-vals table val-column)))))]
+       [save-cc (lambda (id ccs) (save-otm-pair id ccs "publication_cc" "username"))]
+       [save-community-tags (lambda (id ctags) (save-otm-pair id ctags "publication_community_tags" "tag"))]
+       [save-search-text (lambda (id lst) (save-otm-pair id lst "publication_search_text" "word"))]
+       [save-search-title (lambda (id lst) (save-otm-pair id lst "publication_search_title" "word"))]
+       [save-search-url (lambda (id lst) (save-otm-pair id lst "publication_search_url" "word"))]
+       [save-saved-by (lambda (id lst) (save-otm-pair id lst "publication_saved_by" "username"))]
+       [save-shared-by (lambda (id lst) (save-otm-pair id lst "publication_shared_by" "username"))]
+       [save-badged-by (lambda (id lst) (save-otm-pair id lst "publication_badged_by" "username"))]
+       [save-badged-kids (lambda (id lst) (save-otm-pair id lst "publication_badged_kids" "kid_id"))]
+       [save-cubbed-by (lambda (id lst) (save-otm-pair id lst "publication_cubbed_by" "username"))]
+       [save-kids  (lambda (id lst) (save-otm-pair id lst "publication_kids" "kid_id"))]
+       [type-id-story (get-type-id "story" db-conn)]
+       [type-id-comment (get-type-id "comment" db-conn)]
+       [h (make-hash sexp)]
+       [p-id (sqlnil (safe-car (val-if h 'id)))]
+       [p-type (sqlnil (type->id (safe-car (val-if h 'type)) type-id-story type-id-comment))]
+       [p-username (sqlnil (safe-car (val-if h 'by)))]
+       [p-time (sqlnil (safe-car (val-if h 'time)))]
+       [p-date (sqlnil (safe-car (val-if h 'date)))]
+       [p-url (sqlnil (safe-car (val-if h 'url)))]
+       [p-title (sqlnil (safe-car (val-if h 'title)))]
+       [p-mail (sqlnil (not (equal? 'nil (safe-car (val-if h 'mail)))))]
+       [p-tag (sqlnil (safe-car (safe-car (val-if h 'tag))))]
+       [p-tag2 (sqlnil (safe-car (safe-car (val-if h 'tag2))))]
+       [p-text (sqlnil (safe-car (val-if h 'text)))]
+       [p-webdomain (sqlnil (safe-car (safe-car (val-if h 'domain))))]
+       [p-score (sqlnil (safe-car (val-if h 'score)))]
+       [p-deleted (sqlnil (not (equal? 'nil(val-if h 'deleted))))]
+       [p-draft (sqlnil (not (equal? 'nil (val-if h 'draft))))]
+       [p-parent-id (sqlnil (val-if h 'parent))]
+       [keys (sqlnil (val-if h 'keys))]
+       [p-locked (sqlnil (safe-member keys 'locked))]
+       [p-no-kill (sqlnil (safe-member keys 'nokill))]
+       [p-cc (arc-list->list (sqlnil (val-if h 'cc)))]
+       [p-ctags (arc-list->list (sqlnil (val-if h 'ctag)))]
+       [p-search-text (arc-list->list (sqlnil  (safe-car (val-if h 'searchtext))))]
+       [p-search-title (arc-list->list (sqlnil (safe-car (val-if h 'searchtitle))))]
+       [p-search-url (arc-list->list (sqlnil (val-if h 'searchurl)))]
+       [p-votes (arc-list->list (sqlnil     (val-if h 'votes)))]
+       [p-saved-by (arc-list->list (sqlnil  (val-if h 'savedby)))]
+       [p-shared-by (arc-list->list (sqlnil (val-if h 'sharedby)))]
+       [p-badged-by (arc-list->list (sqlnil (val-if h 'badgedby)))]
+       [p-badged-kids (arc-list->list (sqlnil (val-if h 'badgedkids)))]
+       [p-cubbed-by (arc-list->list (sqlnil (val-if h 'cubbedby)))]
+       [p-kids (arc-list->list (sqlnil (val-if h 'kids)))])
+    ;; MUST use a transaction. Because we delete-then-insert, removing the transaction would be a race condition.
+    (query-exec db-conn "BEGIN;") 
+    ;; \todo change to use upsert, when we update to postgresl 9.5
+    (cond
+      [insert (begin (query-exec db-conn query-delete-publication p-id)
+                     (query-exec db-conn query-insert-publication p-id p-type p-username p-time p-date p-url p-title p-mail p-tag p-tag2 p-text p-webdomain p-score p-deleted p-draft p-parent-id p-locked p-no-kill))]
+      [else (query-exec db-conn query-update-publication p-type p-username p-time p-date p-url p-title p-mail p-tag p-tag2 p-text p-webdomain p-score p-deleted p-draft p-parent-id p-locked p-no-kill p-id)])
+    (save-cc p-id p-cc)
+    (save-community-tags p-id p-ctags)
+    (save-search-text p-id p-search-text)
+    (save-search-title p-id p-search-title)
+    (save-search-url p-id p-search-url)
+    (save-votes p-id p-votes)
+    (save-saved-by p-id p-saved-by)
+    (save-shared-by p-id p-shared-by)
+    (save-badged-by p-id p-badged-by)
+    (save-badged-kids p-id p-badged-kids)
+    (save-cubbed-by p-id p-cubbed-by)
+    (save-kids p-id p-kids)
+    ;; (save-kid p-parent-id p-id)
+    (query-exec db-conn "COMMIT;")
+    ;; (write "db-save-publication finished") (newline)
+    (void)))
 
 ; if val is sql-null, returns 'null, else val
 (define (sql-null->null val)
   (if (equal? val sql-null) 'null val))
-
-(define (+id h id)
-  (hash-set h 'id id))
 
 (define (pub-vec->jsexpr v)
   (hasheq
@@ -354,20 +312,16 @@
    'tag       (sql-null->null (vector-ref v 6))
    'tag2      (sql-null->null (vector-ref v 7))
    'text      (sql-null->null (vector-ref v 8))
-   'md        (sql-null->null (vector-ref v 9))
-   'domain    (sql-null->null (vector-ref v 10))
-   'score     (sql-null->null (vector-ref v 11))
-   'deleted   (sql-null->null (vector-ref v 12))
-   'draft     (sql-null->null (vector-ref v 13))
-   'parent_id (sql-null->null (vector-ref v 14))
-   'locked    (sql-null->null (vector-ref v 15))
-   'no_kill   (sql-null->null (vector-ref v 16))
+   'domain    (sql-null->null (vector-ref v 9))
+   'score     (sql-null->null (vector-ref v 10))
+   'deleted   (sql-null->null (vector-ref v 11))
+   'draft     (sql-null->null (vector-ref v 12))
+   'parent_id (sql-null->null (vector-ref v 13))
+   'locked    (sql-null->null (vector-ref v 14))
+   'no_kill   (sql-null->null (vector-ref v 15))
    ))
 
-(define (pub-vec-id->jsexpr v)
-  (+id (pub-vec->jsexpr v) (sql-null->null (vector-ref v 17))))
-
-(define by-id-query  (virtual-statement "select \"username\", \"time\", \"date\", \"url\", \"title\", \"mail\", \"tag\", \"tag2\", \"text\", \"md\", \"web_domain\", \"score\", \"deleted\", \"draft\", \"parent_id\", \"locked\", \"no_kill\" from \"publications\" where \"id\" =  $1"))
+(define by-id-query  (virtual-statement "select \"username\", \"time\", \"date\", \"url\", \"title\", \"mail\", \"tag\", \"tag2\", \"text\", \"web_domain\", \"score\", \"deleted\", \"draft\", \"parent_id\", \"locked\", \"no_kill\" from \"publications\" where \"id\" =  $1"))
 ; this could be made more efficient, by querying the type_id with the publication query, and passing the result here.
 (define type-query  (virtual-statement "select \"publication_type\" from \"publication_types\" where \"id\" = (select \"type_id\" from \"publications\" where \"id\" = $1);"))
 (define votes-query (virtual-statement "select \"vote_id\", \"username\", \"up\", \"num\" from \"publication_votes\" where \"id\" = $1;"))
@@ -393,6 +347,7 @@
        (if (not maybe-type-id)
            h
            (hash-set h 'type (vector-ref maybe-type-id 0)))))]
+  [+id (lambda (h id) (hash-set h 'id id))]
   [+otm
    (lambda (h stmt json-key)
      (let* ([id (hash-ref h 'id)]
