@@ -24,6 +24,8 @@
  arc-list->list
  db-set-md
  db-get-md
+ db-add-donation
+ db-get-donations
  )
 
 (define (improper-list->list l)
@@ -69,6 +71,18 @@
 ;; \return the md for the given publication, or #f if the id does not exist
 (define (db-set-md publication-id md)
   (query-exec db-conn query-set-md md publication-id))
+
+(define query-add-donation
+  (virtual-statement "insert into donations (username, donation_cents, donation_time) values ($1::text, $2::integer, now());"))
+(define (db-add-donation username donation)
+  (query-exec db-conn query-add-donation username donation))
+
+(define query-get-donations
+  (virtual-statement "select sum(donation_cents) from donations where username = $1::text;"))
+;; \return the md for the given publication, or #f if the id does not exist
+(define (db-get-donations username)
+  (let ([val (query-value db-conn query-get-donations username)])
+    (if (eq? val sql-null) 0.0 val)))
 
 (define query-has-community-tag?
   (virtual-statement "select count(1) from publication_community_tagses where id = $1::integer and username = $2::text;"))

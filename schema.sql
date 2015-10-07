@@ -109,3 +109,9 @@ create table if not exists "publication_kids" (
   id     integer, -- fk into publication, NOT a pk, one to many 
   kid_id integer  -- fk into publication
 );
+
+create table if not exists "donations" (
+  username text, -- (will be) fk into users, NOT a pk, one to many 
+  donation_cents integer,
+  donation_time timestamp
+);
