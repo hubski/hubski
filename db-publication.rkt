@@ -248,9 +248,6 @@
                   (save-otm-pair-no-delete id valid-vals table val-column)))))]
        [save-cc (lambda (id ccs) (save-otm-pair id ccs "publication_cc" "username"))]
        [save-community-tags (lambda (id ctags) (save-otm-pair id ctags "publication_community_tags" "tag"))]
-       [save-search-text (lambda (id lst) (save-otm-pair id lst "publication_search_text" "word"))]
-       [save-search-title (lambda (id lst) (save-otm-pair id lst "publication_search_title" "word"))]
-       [save-search-url (lambda (id lst) (save-otm-pair id lst "publication_search_url" "word"))]
        [save-saved-by (lambda (id lst) (save-otm-pair id lst "publication_saved_by" "username"))]
        [save-shared-by (lambda (id lst) (save-otm-pair id lst "publication_shared_by" "username"))]
        [save-badged-by (lambda (id lst) (save-otm-pair id lst "publication_badged_by" "username"))]
@@ -281,9 +278,6 @@
        [p-no-kill (sqlnil (safe-member keys 'nokill))]
        [p-cc (arc-list->list (sqlnil (val-if h 'cc)))]
        [p-ctags (arc-list->list (sqlnil (val-if h 'ctag)))]
-       [p-search-text (arc-list->list (sqlnil  (safe-car (val-if h 'searchtext))))]
-       [p-search-title (arc-list->list (sqlnil (safe-car (val-if h 'searchtitle))))]
-       [p-search-url (arc-list->list (sqlnil (val-if h 'searchurl)))]
        [p-votes (arc-list->list (sqlnil     (val-if h 'votes)))]
        [p-saved-by (arc-list->list (sqlnil  (val-if h 'savedby)))]
        [p-shared-by (arc-list->list (sqlnil (val-if h 'sharedby)))]
@@ -300,9 +294,6 @@
       [else (query-exec db-conn query-update-publication p-type p-username p-time p-date p-url p-title p-mail p-tag p-tag2 p-text p-webdomain p-score p-deleted p-draft p-parent-id p-locked p-no-kill p-id)])
     (save-cc p-id p-cc)
     (save-community-tags p-id p-ctags)
-    (save-search-text p-id p-search-text)
-    (save-search-title p-id p-search-title)
-    (save-search-url p-id p-search-url)
     (save-votes p-id p-votes)
     (save-saved-by p-id p-saved-by)
     (save-shared-by p-id p-shared-by)
@@ -346,9 +337,6 @@
 (define (otm-from-id-query table value-column) (virtual-statement (string-append "select \"" value-column "\" from \"" table "\" where \"id\" = $1;")))
 (define cc-query             (otm-from-id-query "publication_cc"             "username"))
 (define community-tags-query (otm-from-id-query "publication_community_tags" "tag"))
-(define search-text-query    (otm-from-id-query "publication_search_text"    "word"))
-(define search-title-query   (otm-from-id-query "publication_search_title"   "word"))
-(define search-url-query     (otm-from-id-query "publication_search_url"     "word"))
 (define saved-by-query       (otm-from-id-query "publication_saved_by"       "username"))
 (define shared-by-query      (otm-from-id-query "publication_shared_by"      "username"))
 (define badged-by-query      (otm-from-id-query "publication_badged_by"      "username"))
@@ -373,9 +361,6 @@
        (hash-set h json-key vals-list)))]
   [+cc (lambda (h) (+otm h cc-query 'cc))]
   [+community-tags (lambda (h) (+otm h community-tags-query 'community_tag))]
-  [+search-text (lambda (h) (+otm h search-text-query 'search_text))]
-  [+search-title (lambda (h) (+otm h search-title-query 'search_title))]
-  [+search-url (lambda (h) (+otm h search-url-query 'search_url))]
   [+saved-by (lambda (h) (+otm h saved-by-query 'saved_by))]
   [+shared-by (lambda (h) (+otm h shared-by-query 'shared_by))]
   [+badged-by (lambda (h) (+otm h badged-by-query 'badged_by))]
@@ -405,13 +390,10 @@
         (+badged-by
         (+shared-by
         (+saved-by
-        (+search-url
-        (+search-title
-        (+search-text
         (+community-tags
         (+cc
         (+type
-        (+id (pub-vec->jsexpr maybe-pub-vec) id)))))))))))))))))
+        (+id (pub-vec->jsexpr maybe-pub-vec) id))))))))))))))
 
 (define (db-save-publication-no-delete sexp)
   (db-transaction (lambda () (db-save-publication-no-delete-no-transaction sexp))))
@@ -448,9 +430,6 @@
                                  (acc id (rest ctags)))))])
              (query-exec db-conn (string-append "delete from \"" table "\" where \"id\" = $1::integer;") id)
              (acc id ctags))))]
-    [save-search-text (lambda (id lst) (save-otm-pair id lst "publication_search_text" "word"))]
-    [save-search-title (lambda (id lst) (save-otm-pair id lst "publication_search_title" "word"))]
-    [save-search-url (lambda (id lst) (save-otm-pair id lst "publication_search_url" "word"))]
     [save-votes
      (lambda (id votes)
        (let
@@ -507,9 +486,6 @@
   [p-cc (safe-car (val-if h 'cc))]
   [p-ctags (safe-car (val-if h 'ctag))]
   [p-ctagses (safe-car (val-if h 'ctags))]
-  [p-search-text (safe-car (safe-car (val-if h 'searchtext)))]
-  [p-search-title (safe-car (safe-car (val-if h 'searchtitle)))]
-  [p-search-url (safe-car (val-if h 'searchurl))]
   [p-votes (safe-car (val-if h 'votes))]
   [p-saved-by (safe-car (val-if h 'savedby))]
   [p-shared-by (safe-car (val-if h 'sharedby))]
@@ -522,9 +498,6 @@
   (save-cc p-id p-cc)
   (save-community-tags p-id p-ctags)
   (save-community-tagses p-id p-ctagses)
-  (save-search-text p-id p-search-text)
-  (save-search-title p-id p-search-title)
-  (save-search-url p-id p-search-url)
   (save-votes p-id p-votes)
   (save-saved-by p-id p-saved-by)
   (save-shared-by p-id p-shared-by)
