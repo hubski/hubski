@@ -8,7 +8,7 @@
 (require "db-publication.rkt")
 
 ;; \todo make command line arg
-(define port 8003)
+(define port 8001)
 
 ;; creates an OK HTTP response, of text, from the given string.
 (define (make-response-string str)
@@ -70,4 +70,7 @@
                #:command-line? #t ; don't open a web browser on start
 ;               #:servlet-path "/"
                #:servlet-regexp #rx""
+               #:ssl #t
++              #:ssl-cert "/etc/ssl/certs/hubski-certificate.pem"
++              #:ssl-key "/etc/ssl/certs/hubski-private-key.pem"
                )
