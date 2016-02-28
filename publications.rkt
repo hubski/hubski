@@ -5,6 +5,7 @@
 
 #lang racket
 (require json)
+(require "arc-utils.rkt")
 
 (provide
  jsexpr->pub-sexp
@@ -12,8 +13,16 @@
  publication-jsexpr?
  try-string->jsexpr
  pub-sexp->pub-hash
- bool->arc-bool
  publication-is-public
+ nil->null
+ safe-unlist
+ hash-ref-or-nil
+ un-nil-list
+ list-add-hash-member
+ list-add-hash-member-bool
+ list-add-hash-member-symbol
+ list-add-hash-member-list
+ list-add-hash-member-votes
  )
 
 ;; Whether the publication is publically viewable, or private to certain users.
@@ -42,8 +51,6 @@
   (let ([val (null->nil (hash-ref-or-nil h memb))])
     (cons (list sexp-memb (string->symbol val)) l)))
 
-(define (bool->arc-bool b)
-  (if b 't 'nil))
 
 (define (list-add-hash-member-bool h memb sexp-memb l)
   (let ([val (null->nil (hash-ref-or-nil h memb))])
@@ -90,14 +97,14 @@
                                (ctags-iter (hash-iterate-next h i) newl))))])
     (ctags-iter (hash-iterate-first h) '())))
                                   
-(define (list-add-hash-member-community-tags h l)
-  (let* ([memb 'community_tags]
-         [sexp-member 'ctags]
-         [ctags (null->nil (hash-ref-or-nil h memb))])
-;    (write "lahmct ") (write ctags) (write newline)
-    (if (hash-empty? ctags)
-        (cons (list sexp-member 'nil) l)
-        (cons (list sexp-member (ctags-hash->list (hash-ref h memb))) l))))
+;; (define (list-add-hash-member-community-tags h l)
+;;   (let* ([memb 'community_tags]
+;;          [sexp-member 'ctags]
+;;          [ctags (null->nil (hash-ref-or-nil h memb))])
+;; ;    (write "lahmct ") (write ctags) (write newline)
+;;     (if (hash-empty? h)
+;;         (cons (list sexp-member 'nil) l)
+;;         (cons (list sexp-member (h->list (hash-ref h memb))) l))))
 
 ; \todo write a pipeline macro?
 (define (jsexpr->pub-sexp-not-null j)
@@ -168,9 +175,6 @@
 
 (define (nil->null v)
   (if (equal? v 'nil) 'null v))
-
-(define (arc-bool->bool b)
-  (if (equal? b 'nil) #f #t))
 
 (define get-string (compose1
                     nil->null
