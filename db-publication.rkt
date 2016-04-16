@@ -7,7 +7,8 @@
 (require db)
 (require racket/trace)
 (require "db.rkt")
-(require "db-utils.rkt"
+(require "db-utils.rkt")
+(require "arc-utils.rkt")
 (require "publications.rkt")
 
 (provide
@@ -352,22 +353,7 @@
          pub-vec-list)
     h))
 
-(define (+otm-all h stmt json-key)
-  (let* ([vals (query-rows db-conn stmt)])
-    (hash-for-each
-     h
-     (lambda (key-id value-pub)
-       (hash-set! value-pub json-key '())))
-    (if (empty? vals) 'nil
-        (for-each
-         (lambda (v)
-           (let* ([row-id (vector-ref v 0)]
-                  [pub-h (hash-ref! h row-id (make-hasheq))]
-                  [pub-otm-list (hash-ref! pub-h json-key '())]
-                  [otm-val (vector-ref v 1)])
-             (hash-set! pub-h json-key (cons otm-val pub-otm-list))))
-         vals))
-        h))
+
 
 (define (+votes-all h)
   (let* ([votes (query-rows db-conn votes-all-query)])
@@ -402,7 +388,7 @@
        [+badged-kids    (lambda (h) (+otm-all h badged-kids-all-query    'badgedkids))]
        [+cubbed-by      (lambda (h) (+otm-all h cubbed-by-all-query      'cubbedby))]
        [+kids           (lambda (h) (+otm-all h kids-all-query           'kids))]
-       [+otms (compose1 +votes-all +kids +cubbed-by +badged-kids +badged-by +shared-by +saved-by +community-tags +cc)] ;; +type ;; type is added by pub-vec-list->pub-hash       
+       [+otms (compose1 +votes-all +kids +cubbed-by +badged-kids +badged-by +shared-by +saved-by +community-tags +cc)] ;; +type ;; type is added by pub-vec-list->pub-hash
        [pub-vec-list (query-rows db-conn load-all-pubs-query)])
     (+otms (pub-vec-list->pubs-hash pub-vec-list))))
 

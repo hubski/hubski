@@ -7,12 +7,14 @@
  safe-member
  string-or-nil
  sqlnil
+ from-sqlnil
  db-insert-idval
  db-delete-from
  safe-car
  sql-null->null
  otm-all-query
  save-otm-pair
+ +otm-all
  )
 
 ; gets the hash key if it exists, else 'nil
@@ -29,6 +31,9 @@
 ; converts 'nil to sql-null. Anything else is returned without modification
 (define (sqlnil val)
   (if (equal? val 'nil) sql-null val))
+
+(define (from-sqlnil val)
+  (if (equal? val sql-null) 'nil val))
 
 ; many of the one-to-many tables have a single key and string.
 ; this lets us insert into them easily.
@@ -50,7 +55,10 @@
 
 (define (otm-all-query table value-column) (virtual-statement (string-append "select id, \"" value-column "\" from \"" table "\";")))
 
+(define (otm-delete-query table) (virtual-statement (string-append "delete from \"" table "\" where id = $1;")))
+
 (define (save-otm-pair id vals table val-column)
+  (query-exec db-conn (otm-delete-query table) id)
   (if (pair? vals)
       (map (lambda (val)
              (if (not (equal? val 'nil))
@@ -58,3 +66,18 @@
                  (void))
              ) vals)
       void))
+
+(define (+otm-all h stmt json-key)
+  (let* ([vals (query-rows db-conn stmt)])
+    (for-each
+     (lambda (v)
+       (let* ([row-id (vector-ref v 0)]
+              [pub-h (hash-ref! h row-id (make-hash))]
+              [pub-otm-list (hash-ref! pub-h json-key '())]
+              [otm-val (vector-ref v 1)]
+              [new-otm-list (cons otm-val pub-otm-list)])
+         (hash-set! pub-h json-key new-otm-list)
+         (hash-set! h row-id pub-h) ; \todo determine if necessary
+         ))
+     vals)
+    h))

@@ -11,11 +11,17 @@
 (define (parse-file f)
   (let* ([absolute-path (build-path filepath f)]
          [file (open-input-file absolute-path)]
-         [sexp (read file)])
-    (db-save-user-no-delete-no-transaction sexp)
+         [sexp-needs-car (read file)]
+         [sexp (map (lambda (v)
+                      (let ([key (car v)]
+                             [val (cdr v)])
+                        (cons key (car val))))
+                    sexp-needs-car)]
+         [h (make-hash sexp)])
+    (db-save-user-no-delete-no-transaction h)
     (close-input-port file)))
 
-(define batch-size 10000)
+(define batch-size 100)
 
 (define (convert-file-list l)
   (if (equal? l '()) (void)
@@ -24,6 +30,8 @@
                               (split-at l batch-size))])
         (db-transaction
          (lambda ()
+           (write "starting batch")
+           (newline)
            (map (lambda (f)
                   (parse-file f)) h)))
         (convert-file-list t))))
