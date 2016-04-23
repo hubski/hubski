@@ -29,20 +29,31 @@
 (write user) (newline)
 
 
-(write "saving user") (newline)
 
-(write "votes:")
-(newline)
-(write (hash-ref user 'votes))
-(newline)
-(write (hash-ref user 'followed))
-(newline)
+;; (write "votes:")
+;; (newline)
+;; (write (hash-ref user 'votes))
+;; (newline)
+;; (write (hash-ref user 'followed))
+;; (newline)
 
+(write "modifying user") (newline)
 (hash-set! user 'bio "yo yo")
 (hash-set! user 'saved (list 42 'nil))
+
+(write "saving user") (newline)
 (db-save-user user)
 
 (write "saved user")
 (newline)
 
+(define user2 (db-load-user "317"))
+(write "user2:") (newline)
+(write user2) (newline)
+
 ;(hash-for-each allusers (lambda (k v) (write k) (newline) (write v) (newline) (newline)))
+
+(define user-id-list (db-get-users))
+
+(write "num users:") (newline)
+(write (length user-id-list)) (newline)

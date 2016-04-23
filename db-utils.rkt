@@ -13,6 +13,7 @@
  safe-car
  sql-null->null
  otm-all-query
+ otm-all-query-val-ascending
  save-otm-pair
  +otm-all
  )
@@ -54,6 +55,8 @@
   (if (equal? val sql-null) 'null val))
 
 (define (otm-all-query table value-column) (virtual-statement (string-append "select id, \"" value-column "\" from \"" table "\";")))
+
+(define (otm-all-query-val-ascending table value-column) (virtual-statement (string-append "select id, \"" value-column "\" from \"" table "\" order by \"" value-column "\" asc;")))
 
 (define (otm-delete-query table) (virtual-statement (string-append "delete from \"" table "\" where id = $1;")))
 

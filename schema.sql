@@ -33,7 +33,7 @@ create table if not exists "publications" (
   no_kill     boolean
 );
 
--- maps to cc field in pub structure  
+-- maps to cc field in pub structure
 create table if not exists "publication_cc" (
   id       integer, -- fk into publication, NOT pk, one-to-many
   username text
@@ -101,20 +101,21 @@ create table if not exists "publication_badged_kids" (
 );
 
 create table if not exists "publication_cubbed_by" (
-  id       integer, -- fk into publication, NOT a pk, one to many 
+  id       integer, -- fk into publication, NOT a pk, one to many
   username text
 );
 
 create table if not exists "publication_kids" (
-  id     integer, -- fk into publication, NOT a pk, one to many 
+  id     integer, -- fk into publication, NOT a pk, one to many
   kid_id integer  -- fk into publication
 );
 
 create table if not exists "donations" (
-  username text, -- (will be) fk into users, NOT a pk, one to many 
+  username text, -- (will be) fk into users, NOT a pk, one to many
   donation_cents integer,
   donation_time timestamp
 );
+
 
 ----------------------------------------
 -- profile structure
@@ -135,6 +136,7 @@ create table if not exists "users" (
   new_tabs                boolean,
   publication_tabs        boolean,
   reply_alerts            boolean,
+  pm_alerts               boolean,
   follower_alerts         boolean,
   shout_outs              boolean,
   badge_alerts            boolean,
@@ -323,7 +325,7 @@ create table if not exists "users_password_hashes" (
   id text, -- pk, fk into users
   hash_type text,
   hash1 text,
-  hash2 text     
+  hash2 text
 );
 
 create table if not exists "users_cookies" (
